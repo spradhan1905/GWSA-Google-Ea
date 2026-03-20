@@ -85,8 +85,9 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    print(f"\n  🌍 GWSA GeoAnalytics API")
-    print(f"  📍 http://localhost:5000")
-    print(f"  🎭 Demo mode: {Config.DEMO_MODE}")
-    print(f"  🤖 Gemini: {'configured' if Config.GEMINI_API_KEY else 'not configured'}\n")
-    app.run(host='0.0.0.0', port=5000, debug=Config.DEBUG)
+    port = int(os.environ.get('PORT', '5000'))
+    print(f"\n  GWSA GeoAnalytics API")
+    print(f"  http://localhost:{port}")
+    print(f"  Demo mode: {Config.DEMO_MODE}")
+    print(f"  Gemini: {'configured' if Config.GEMINI_API_KEY else 'not configured'}\n")
+    app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
