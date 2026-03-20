@@ -1,13 +1,30 @@
 """
 GWSA GeoAnalytics — Database Connection
 SQL Server via pyodbc with connection pooling.
+pyodbc is imported lazily so the app can start in DEMO_MODE without it.
 """
-import pyodbc
 from config import Config
+
+_pyodbc = None
+
+
+def _get_pyodbc():
+    global _pyodbc
+    if _pyodbc is None:
+        try:
+            import pyodbc
+            _pyodbc = pyodbc
+        except ImportError:
+            raise RuntimeError(
+                "pyodbc is not installed. Install it with: pip install pyodbc\n"
+                "This is only required when DEMO_MODE=False."
+            )
+    return _pyodbc
 
 
 def get_connection():
     """Create a SQL Server connection using config values."""
+    pyodbc = _get_pyodbc()
     conn_str = (
         f"DRIVER={Config.SQL_DRIVER};"
         f"SERVER={Config.SQL_SERVER};"

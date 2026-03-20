@@ -3,6 +3,8 @@ flask-cors==4.0.0
 flask-limiter==3.5.0
 flask-talisman==1.1.0
 marshmallow==3.20.0
-pyodbc==5.0.1
 python-dotenv==1.0.0
 google-generativeai==0.7.0
+# pyodbc is only needed when DEMO_MODE=False (real SQL Server).
+# Install it manually on systems with ODBC drivers:
+#   pip install pyodbc==5.0.1

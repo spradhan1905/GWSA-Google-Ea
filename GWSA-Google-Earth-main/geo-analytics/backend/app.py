@@ -3,6 +3,7 @@ GWSA GeoAnalytics — Flask Application
 Goodwill Industries of San Antonio
 Full-stack geospatial analytics platform.
 """
+import os
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
@@ -89,4 +90,5 @@ if __name__ == '__main__':
     print(f"  📍 http://localhost:5000")
     print(f"  🎭 Demo mode: {Config.DEMO_MODE}")
     print(f"  🤖 Gemini: {'configured' if Config.GEMINI_API_KEY else 'not configured'}\n")
-    app.run(host='0.0.0.0', port=5000, debug=Config.DEBUG)
+    port = int(os.environ.get('PORT', '5000'))
+    app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
