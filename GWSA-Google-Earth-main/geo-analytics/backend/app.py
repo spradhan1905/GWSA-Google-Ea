@@ -2,6 +2,7 @@
 GWSA GeoAnalytics — Flask Application
 Goodwill Industries of San Antonio
 Full-stack geospatial analytics platform.
+v1.0 Demo
 """
 import os
 from flask import Flask, jsonify
