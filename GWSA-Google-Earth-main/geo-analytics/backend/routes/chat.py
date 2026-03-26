@@ -10,7 +10,7 @@ from config import Config
 chat_bp = Blueprint('chat', __name__)
 
 SYSTEM_CONTEXT = """
-You are a data analyst assistant for Goodwill Industries of San Antonio (GWSA) and Texas Thrift.
+You are a data analyst assistant for Goodwill Industries of San Antonio (GWSA)
 You have access to store financial data, door counts, and location information across
 San Antonio, South Texas, and Laredo. Be concise, professional, and data-driven.
 Store types: retail stores, ADC (Attended Donation Centers), outlets, drop boxes.
@@ -20,7 +20,7 @@ When providing numbers, use proper currency formatting ($X,XXX).
 
 
 def _get_gemini_model():
-    """Lazy-load Gemini model to avoid import errors when key is missing."""
+    
     try:
         import google.generativeai as genai
         genai.configure(api_key=Config.GEMINI_API_KEY)
