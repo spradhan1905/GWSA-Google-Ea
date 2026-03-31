@@ -94,9 +94,9 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    print(f"\n  🌍 GWSA GeoAnalytics API")
-    print(f"  📍 http://localhost:5000")
-    print(f"  📊 Metrics: SQL (SalesFact + static locations list)")
-    print(f"  🤖 Gemini: {'configured' if Config.GEMINI_API_KEY else 'not configured'}\n")
     port = int(os.environ.get('PORT', '5000'))
+    print(f"\n  GWSA GeoAnalytics API")
+    print(f"  http://localhost:{port}")
+    print(f"  Metrics: SQL (SalesFact + static locations)")
+    print(f"  Gemini: {'configured' if Config.GEMINI_API_KEY else 'not configured'}\n")
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
