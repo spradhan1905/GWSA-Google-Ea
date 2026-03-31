@@ -1,7 +1,7 @@
 """
 GWSA GeoAnalytics — Database Connection
 SQL Server via pyodbc with connection pooling.
-pyodbc is imported lazily so the app can start in DEMO_MODE without it.
+pyodbc is imported lazily so the app can start before first DB access.
 """
 from config import Config
 
@@ -17,7 +17,7 @@ def _get_pyodbc():
         except ImportError:
             raise RuntimeError(
                 "pyodbc is not installed. Install it with: pip install pyodbc\n"
-                "This is only required when DEMO_MODE=False."
+                "This is required for live SQL queries."
             )
     return _pyodbc
 
@@ -25,15 +25,28 @@ def _get_pyodbc():
 def get_connection():
     """Create a SQL Server connection using config values."""
     pyodbc = _get_pyodbc()
-    conn_str = (
+    if not Config.SQL_USE_WINDOWS_AUTH and (
+        not (Config.SQL_USERNAME or "").strip() or not (Config.SQL_PASSWORD or "").strip()
+    ):
+        raise RuntimeError(
+            "SQL login requires SQL_USERNAME and SQL_PASSWORD, or set SQL_USE_WINDOWS_AUTH=True "
+            "for Windows Integrated Security."
+        )
+    base = (
         f"DRIVER={Config.SQL_DRIVER};"
         f"SERVER={Config.SQL_SERVER};"
         f"DATABASE={Config.SQL_DATABASE};"
-        f"UID={Config.SQL_USERNAME};"
-        f"PWD={Config.SQL_PASSWORD};"
         "TrustServerCertificate=yes;"
         "Connection Timeout=30;"
     )
+    if Config.SQL_USE_WINDOWS_AUTH:
+        conn_str = base + "Trusted_Connection=yes;"
+    else:
+        conn_str = (
+            base
+            + f"UID={Config.SQL_USERNAME};"
+            + f"PWD={Config.SQL_PASSWORD};"
+        )
     return pyodbc.connect(conn_str)
 
 

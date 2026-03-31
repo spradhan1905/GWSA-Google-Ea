@@ -2,8 +2,9 @@
  * GWSA GeoAnalytics — DateRangePicker
  * Quick presets + custom date inputs.
  */
-import React, { useState } from 'react';
+import React from 'react';
 import { Calendar } from 'lucide-react';
+import { localDateISO } from '../../utils/dateUtils';
 
 const PRESETS = [
   { label: 'This Month', months: 1 },
@@ -12,23 +13,24 @@ const PRESETS = [
   { label: '12 Months', months: 12 },
 ];
 
-export default function DateRangePicker({ dateRange, onChange }) {
-  const [activePreset, setActivePreset] = useState('12 Months');
-
+export default function DateRangePicker({ dateRange, onChange, preset: activePreset = 'This Month' }) {
   const applyPreset = (preset) => {
-    setActivePreset(preset.label);
     const end = new Date();
     let start;
     if (preset.label === 'YTD') {
       start = new Date(end.getFullYear(), 0, 1);
+    } else if (preset.label === 'This Month') {
+      // Calendar month to date (not "previous month")
+      start = new Date(end.getFullYear(), end.getMonth(), 1);
     } else {
       start = new Date();
       start.setMonth(start.getMonth() - preset.months);
       start.setDate(1);
     }
     onChange({
-      start: start.toISOString().split('T')[0],
-      end: end.toISOString().split('T')[0],
+      start: localDateISO(start),
+      end: localDateISO(end),
+      preset: preset.label,
     });
   };
 

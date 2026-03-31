@@ -13,10 +13,8 @@ donor_addresses_bp = Blueprint('donor_addresses', __name__)
 @limiter.limit("30 per minute")
 @require_valid_store
 def get_donor_addresses(store_id):
-    if Config.DEMO_MODE:
-        from db.mock_data import get_mock_donor_addresses
-        data = get_mock_donor_addresses(store_id)
-        return jsonify(data)
+    if Config.LOCATIONS_SOURCE == "static":
+        return jsonify([])
 
     try:
         from db.queries import get_donor_addresses as db_get_donor_addresses

@@ -24,10 +24,8 @@ def get_trends(store_id):
 
     months = params['months']
 
-    if Config.DEMO_MODE:
-        from db.mock_data import get_mock_trends
-        data = get_mock_trends(store_id, months)
-        return jsonify(data)
+    if Config.LOCATIONS_SOURCE == "static":
+        return jsonify([])
 
     try:
         from db.queries import get_trends as db_get_trends

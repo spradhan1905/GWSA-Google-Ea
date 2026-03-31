@@ -11,11 +11,14 @@ chat_bp = Blueprint('chat', __name__)
 
 SYSTEM_CONTEXT = """
 You are a data analyst assistant for Goodwill Industries of San Antonio (GWSA)
-You have access to store financial data, door counts, and location information across
-San Antonio, South Texas, and Laredo. Be concise, professional, and data-driven.
+You have access to store financial data, POS / line-level daily sales, door counts, and location
+information across San Antonio, South Texas, and Laredo. Be concise, professional, and data-driven.
 Store types: retail stores, ADC (Attended Donation Centers), outlets, drop boxes.
 Do not mention or infer specific manager names; refer only to roles (for example, "store managers" or "regional leaders").
 When providing numbers, use proper currency formatting ($X,XXX).
+For store-level sales, the authoritative line table includes Revenue, Soldts (transaction time),
+SalesCategoryFromGP (filter 'Core Sales' for core retail revenue), SoldStoreId, and [sales unit name]
+(store display name). Ignore columns not listed in the schema hint unless the user asks.
 """
 
 
@@ -31,12 +34,19 @@ def _get_gemini_model():
 
 def try_text_to_sql(model, question: str, store_id: str):
     """Attempt to generate and execute a safe SQL query from natural language."""
+    # Object name matches Config.SQL_SALES_LINE_OBJECT (default JS_API.dbo.SalesFactFinal)
     schema_hint = """
     Tables:
       Locations(LocationID, LocationName, LocationType, Manager)
-      Financials(LocationID, PeriodMonth DATE, NetRevenue, NetIncome, ExpenseRatio,
-                 DonatedGoodsRev, RetailRevenue)
-      DoorCount(LocationID, CountDate DATE, DonorVisits INT)
+      PeopleCounter.dbo.PCounter(LocationID, Date, In; hourly rows aggregate to daily; multiple LocationIDs per store sum Left+Right)
+      SalesFactFinal (JS_API.dbo — line-level POS; primary source for revenue KPIs):
+        SalesTransid, SalesLineNum, SoldStoreId, SKU, Qty, DetailPrice, DetailTotalDiscount, DetailTax,
+        RotColor, Category, Subcategory, Dept, Soldts (DATETIME — filter by date for MTD),
+        PricePoint, CashEmp, Register, Transtype, OrigTrans, OrigStoreId, ttlSaleTax, ttlNetTotalPrice,
+        Revenue (line revenue; SUM for MTD Core Sales),
+        [sales unit name] (store display name),
+        SalesSubCategoryFromGP, SalesCategoryFromGP (use N'Core Sales' for core retail revenue)
+      Ignore for current KPIs: Unit, [sales store unit], DiscountType, barcode, Vena_Groups, DGR_Tiers, SalesAccount.
     """
     sql_prompt = f"""
     Schema: {schema_hint}
@@ -52,17 +62,14 @@ def try_text_to_sql(model, question: str, store_id: str):
         if not is_safe_sql(sql_query):
             return None, None
 
-        if not Config.DEMO_MODE:
-            from db.connection import get_connection
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute(sql_query)
-            cols = [d[0] for d in cursor.description]
-            result = [dict(zip(cols, row)) for row in cursor.fetchall()]
-            conn.close()
-            return sql_query, result
-        else:
-            return sql_query, [{"note": "Demo mode — SQL not executed"}]
+        from db.connection import get_connection
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(sql_query)
+        cols = [d[0] for d in cursor.description]
+        result = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        conn.close()
+        return sql_query, result
     except Exception:
         return None, None
 

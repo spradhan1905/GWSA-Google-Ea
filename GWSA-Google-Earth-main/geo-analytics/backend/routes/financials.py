@@ -7,8 +7,6 @@ from marshmallow import ValidationError
 from middleware.security import (
     limiter, FinancialsQuerySchema, require_valid_store
 )
-from config import Config
-
 financials_bp = Blueprint('financials', __name__)
 
 
@@ -24,15 +22,11 @@ def get_financials(store_id):
 
     start = params['start'].isoformat()
     end = params['end'].isoformat()
-
-    if Config.DEMO_MODE:
-        from db.mock_data import get_mock_financials
-        data = get_mock_financials(store_id, start, end)
-        return jsonify(data)
+    this_month = params['this_month']
 
     try:
         from db.queries import get_financials as db_get_financials
-        data = db_get_financials(store_id, start, end)
+        data = db_get_financials(store_id, start, end, this_month=this_month)
         return jsonify(data)
     except Exception as e:
         return jsonify(error=str(e)), 500

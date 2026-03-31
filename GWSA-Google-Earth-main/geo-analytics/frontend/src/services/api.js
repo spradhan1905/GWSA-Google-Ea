@@ -28,8 +28,11 @@ api.interceptors.response.use(
 
 export const fetchLocations = () => api.get('/locations');
 
-export const fetchFinancials = (storeId, start, end) =>
-  api.get(`/financials/${encodeURIComponent(storeId)}`, { params: { start, end } });
+/** thisMonth: when true, backend reads JS_API.dbo.SalesFactFinal (This Month preset only). */
+export const fetchFinancials = (storeId, start, end, { thisMonth = false } = {}) =>
+  api.get(`/financials/${encodeURIComponent(storeId)}`, {
+    params: { start, end, ...(thisMonth ? { this_month: true } : {}) },
+  });
 
 export const fetchDoorCount = (storeId, start, end) =>
   api.get(`/door-count/${encodeURIComponent(storeId)}`, { params: { start, end } });

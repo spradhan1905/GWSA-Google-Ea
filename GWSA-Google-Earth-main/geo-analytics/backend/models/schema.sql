@@ -8,12 +8,16 @@ CREATE TABLE dbo.Locations (
     LocationName    NVARCHAR(100) NOT NULL,
     LocationType    VARCHAR(20)   NOT NULL
         CONSTRAINT CK_LocationType CHECK (LocationType IN ('store','adc','outlet','dropbox')),
+    -- Optional keys to match JS_API.dbo.SalesFactFinal (see sample_sales_file.xlsx / SoldStoreId, sales store unit)
+    SoldStoreId     INT           NULL,
+    SalesStoreUnit  NVARCHAR(120) NULL,
     Manager         NVARCHAR(100),
     Latitude        DECIMAL(9,6),
     Longitude       DECIMAL(9,6),
     IsActive        BIT           DEFAULT 1,
     CreatedAt       DATETIME      DEFAULT GETDATE()
 );
+CREATE INDEX IX_Locations_SoldStoreId ON dbo.Locations (SoldStoreId) WHERE SoldStoreId IS NOT NULL;
 
 CREATE TABLE dbo.Financials (
     FinancialID     INT IDENTITY  PRIMARY KEY,
@@ -29,6 +33,7 @@ CREATE TABLE dbo.Financials (
 );
 CREATE INDEX IX_Financials_Loc_Period ON dbo.Financials (LocationID, PeriodMonth);
 
+-- Optional local/dev mirror. Production door metrics read PeopleCounter.dbo.PCounter (see backend SQL_DOOR_COUNT_* env).
 CREATE TABLE dbo.DoorCount (
     DoorCountID     INT IDENTITY  PRIMARY KEY,
     LocationID      VARCHAR(50)   NOT NULL REFERENCES dbo.Locations(LocationID),

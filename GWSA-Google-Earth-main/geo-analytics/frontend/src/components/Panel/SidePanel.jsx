@@ -12,6 +12,7 @@ import MetricSelector from './MetricSelector';
 import LoadingSpinner from '../Layout/LoadingSpinner';
 import { fetchFinancials, fetchDoorCount, fetchTrends, fetchDonorAddresses } from '../../services/api';
 import { formatCurrency, formatPercent, formatNumber, getChangeIndicator } from '../../utils/formatters';
+import { localDateISO, calendarDaysInclusive, formatDateShort } from '../../utils/dateUtils';
 
 const TABS = [
   { id: 'financials', label: 'Financials', icon: TrendingUp },
@@ -22,42 +23,68 @@ const TABS = [
 
 export default function SidePanel({ location, open, onClose }) {
   const [activeTab, setActiveTab] = useState('financials');
-  const [dateRange, setDateRange] = useState({ start: null, end: null });
+  const [dateRange, setDateRange] = useState(() => {
+    const end = new Date();
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    return {
+      start: localDateISO(start),
+      end: localDateISO(end),
+    };
+  });
+  /** Drives API: only `This Month` uses JS_API SalesFactFinal; other presets use dbo.Financials. */
+  /** Default: This Month + JS_API SalesFactFinal (MTD Core Sales revenue). */
+  const [financialsPreset, setFinancialsPreset] = useState('This Month');
   const [financials, setFinancials] = useState([]);
   const [doorCount, setDoorCount] = useState([]);
+  const [doorCountError, setDoorCountError] = useState(null);
   const [trends, setTrends] = useState([]);
   const [donorAddresses, setDonorAddresses] = useState([]);
   const [donorMapLoading, setDonorMapLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Initialize date range (last 12 months)
+  // MTD range (calendar month to date) + This Month preset whenever the user picks a location
   useEffect(() => {
+    if (!location?.id) return;
     const end = new Date();
-    const start = new Date();
-    start.setMonth(start.getMonth() - 12);
-    start.setDate(1);
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
     setDateRange({
-      start: start.toISOString().split('T')[0],
-      end: end.toISOString().split('T')[0],
+      start: localDateISO(start),
+      end: localDateISO(end),
     });
-  }, []);
+    setFinancialsPreset('This Month');
+  }, [location?.id]);
 
   // Fetch data when location or date changes
   useEffect(() => {
     if (!location?.id || !dateRange.start || !dateRange.end) return;
     setError(null);
+    setDoorCountError(null);
 
     const loadData = async () => {
       setLoading(true);
       try {
         const [finRes, dcRes, trRes] = await Promise.allSettled([
-          fetchFinancials(location.id, dateRange.start, dateRange.end),
+          fetchFinancials(location.id, dateRange.start, dateRange.end, {
+            thisMonth: financialsPreset === 'This Month',
+          }),
           fetchDoorCount(location.id, dateRange.start, dateRange.end),
           fetchTrends(location.id, 12),
         ]);
         if (finRes.status === 'fulfilled') setFinancials(finRes.value.data || []);
-        if (dcRes.status === 'fulfilled') setDoorCount(dcRes.value.data || []);
+        if (dcRes.status === 'fulfilled') {
+          const payload = dcRes.value.data;
+          setDoorCount(Array.isArray(payload) ? payload : []);
+        } else {
+          setDoorCount([]);
+          const err = dcRes.reason;
+          const detail =
+            err?.response?.data?.error ??
+            (typeof err?.response?.data === 'string' ? err.response.data : null);
+          setDoorCountError(
+            detail || err?.message || 'Could not load door counts. Check SQL / PeopleCounter.',
+          );
+        }
         if (trRes.status === 'fulfilled') setTrends(trRes.value.data || []);
       } catch (e) {
         setError('Failed to load data. Please try again.');
@@ -66,7 +93,7 @@ export default function SidePanel({ location, open, onClose }) {
       }
     };
     loadData();
-  }, [location?.id, dateRange.start, dateRange.end]);
+  }, [location?.id, dateRange.start, dateRange.end, financialsPreset]);
 
   // Reset tab on new location
   useEffect(() => { setActiveTab('financials'); }, [location?.id]);
@@ -84,29 +111,32 @@ export default function SidePanel({ location, open, onClose }) {
   if (!location) return null;
   const typeCfg = LOCATION_TYPE_CONFIG[location.type] || {};
 
-  // Compute KPIs from financials data
+  const isThisMonthPreset = financialsPreset === 'This Month';
+
+  // Revenue: daily rows (This Month / SalesFact) or monthly NetRevenue (legacy Financials)
   const totalRevenue = financials.reduce((s, f) => s + (f.NetRevenue || 0), 0);
+
+  // Legacy Financials KPIs (Quarter / YTD / 12 Months — dbo.Financials)
   const totalIncome = financials.reduce((s, f) => s + (f.NetIncome || 0), 0);
   const avgExpense = financials.length > 0
     ? financials.reduce((s, f) => s + (f.ExpenseRatio || 0), 0) / financials.length : 0;
   const totalDonated = financials.reduce((s, f) => s + (f.DonatedGoodsRev || 0), 0);
   const totalRetail = financials.reduce((s, f) => s + (f.RetailRevenue || 0), 0);
-
-  // Door count KPIs
-  const totalVisits = doorCount.reduce((s, d) => s + (d.DonorVisits || 0), 0);
-  const avgDaily = doorCount.length > 0 ? Math.round(totalVisits / doorCount.length) : 0;
-  const peakDay = doorCount.reduce((max, d) => d.DonorVisits > (max.DonorVisits || 0) ? d : max, {});
-
-  // MoM change for income
-  const lastTwo = financials.slice(-2);
-  const incomeChange = lastTwo.length === 2
-    ? getChangeIndicator(lastTwo[1].NetIncome, lastTwo[0].NetIncome) : null;
-
-  // YTD Net Income (current calendar year)
+  const lastTwoFin = financials.slice(-2);
+  const incomeChange = lastTwoFin.length === 2
+    ? getChangeIndicator(lastTwoFin[1].NetIncome, lastTwoFin[0].NetIncome) : null;
   const currentYear = new Date().getFullYear();
   const ytdNetIncome = financials
-    .filter((f) => f.PeriodMonth && f.PeriodMonth.startsWith(String(currentYear)))
+    .filter((f) => f.PeriodMonth && String(f.PeriodMonth).startsWith(String(currentYear)))
     .reduce((s, f) => s + (f.NetIncome || 0), 0);
+
+  // Door count KPIs — DonorVisits maps to source column "In" (daily rows; same presets as Financials).
+  const doorCalendarDays = calendarDaysInclusive(dateRange.start, dateRange.end);
+  const totalVisits = doorCount.reduce((s, d) => s + (d.DonorVisits || 0), 0);
+  const avgDaily =
+    doorCalendarDays > 0 ? Math.round(totalVisits / doorCalendarDays) : 0;
+  const peakDay = doorCount.reduce((max, d) =>
+    (d.DonorVisits || 0) > (max.DonorVisits || 0) ? d : max, {});
 
   return (
     <div className={`absolute top-0 right-0 h-full w-full sm:w-[440px] z-40 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
@@ -162,7 +192,14 @@ export default function SidePanel({ location, open, onClose }) {
 
         {/* Date Range */}
         <div className="shrink-0 px-5 py-2">
-          <DateRangePicker dateRange={dateRange} onChange={setDateRange} />
+          <DateRangePicker
+            dateRange={dateRange}
+            preset={financialsPreset}
+            onChange={({ start, end, preset }) => {
+              setDateRange({ start, end });
+              setFinancialsPreset(preset);
+            }}
+          />
         </div>
 
         {/* Content */}
@@ -179,13 +216,30 @@ export default function SidePanel({ location, open, onClose }) {
             <>
               {activeTab === 'financials' && (
                 <FinancialsTab
-                  data={financials} totalRevenue={totalRevenue} totalIncome={totalIncome}
-                  avgExpense={avgExpense} totalDonated={totalDonated} totalRetail={totalRetail}
-                  incomeChange={incomeChange} ytdNetIncome={ytdNetIncome}
+                  location={location}
+                  data={financials}
+                  totalRevenue={totalRevenue}
+                  isThisMonth={isThisMonthPreset}
+                  totalIncome={totalIncome}
+                  avgExpense={avgExpense}
+                  totalDonated={totalDonated}
+                  totalRetail={totalRetail}
+                  incomeChange={incomeChange}
+                  ytdNetIncome={ytdNetIncome}
                 />
               )}
               {activeTab === 'doorcount' && (
-                <DoorCountTab data={doorCount} totalVisits={totalVisits} avgDaily={avgDaily} peakDay={peakDay} />
+                <DoorCountTab
+                  data={doorCount}
+                  totalVisits={totalVisits}
+                  avgDaily={avgDaily}
+                  peakDay={peakDay}
+                  preset={financialsPreset}
+                  rangeStart={dateRange.start}
+                  rangeEnd={dateRange.end}
+                  calendarDays={doorCalendarDays}
+                  loadError={doorCountError}
+                />
               )}
               {activeTab === 'trends' && <TrendsTab data={trends} />}
               {activeTab === 'donormap' && (
@@ -201,7 +255,62 @@ export default function SidePanel({ location, open, onClose }) {
 
 /* ─── Tab Content Components ─── */
 
-function FinancialsTab({ data, totalRevenue, totalIncome, avgExpense, totalDonated, totalRetail, incomeChange, ytdNetIncome }) {
+function FinancialsTab({
+  location,
+  data,
+  totalRevenue,
+  isThisMonth,
+  totalIncome,
+  avgExpense,
+  totalDonated,
+  totalRetail,
+  incomeChange,
+  ytdNetIncome,
+}) {
+  const isRetail = location?.type === 'store';
+
+  // This Month only: MTD Revenue from JS_API SalesFactFinal (Core Sales daily sum).
+  if (isThisMonth) {
+    return (
+      <div className="space-y-4 pt-2">
+        <MetricCard
+          label="MTD Revenue"
+          value={formatCurrency(totalRevenue)}
+          color="blue"
+          subtext="Core Sales · calendar month to date"
+        />
+        {!isRetail && (
+          <p className="text-xs text-gwsa-text-muted -mt-2">
+            MTD is tied to retail POS lines in sales data. Filter the list to <strong className="font-medium text-gwsa-text-secondary">Retail</strong> for store-level totals.
+          </p>
+        )}
+        {data.length === 0 && (
+          <p className="text-sm text-gwsa-text-muted">
+            No rows for this store in the selected range. Confirm GP{' '}
+            <code className="text-xs bg-gwsa-bg px-1 rounded">SalesCategoryFromGP</code> (set{' '}
+            <code className="text-xs bg-gwsa-bg px-1 rounded">SQL_SALES_CORE_CATEGORY</code> empty in{' '}
+            <code className="text-xs bg-gwsa-bg px-1 rounded">backend/.env</code> to test), or add{' '}
+            <code className="text-xs bg-gwsa-bg px-1 rounded">sold_store_id</code> /{' '}
+            <code className="text-xs bg-gwsa-bg px-1 rounded">sales_unit_name</code> in{' '}
+            <code className="text-xs bg-gwsa-bg px-1 rounded">static_locations.py</code>.
+          </p>
+        )}
+        {data.length > 0 && (
+          <TrendChart
+            data={data.map(d => ({
+              date: d.SalesDate || d.PeriodMonth,
+              value: d.NetRevenue,
+            }))}
+            title="Daily revenue (MTD)"
+            lines={[{ key: 'value', color: '#3B82F6', name: 'Revenue' }]}
+            dateAxisGranularity="day"
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Quarter / YTD / 12 Months: full Financials KPIs + Net Income vs Revenue chart.
   return (
     <div className="space-y-4 pt-2">
       <div className="grid grid-cols-2 gap-3">
@@ -230,23 +339,104 @@ function FinancialsTab({ data, totalRevenue, totalIncome, avgExpense, totalDonat
   );
 }
 
-function DoorCountTab({ data, totalVisits, avgDaily, peakDay }) {
+function DoorCountTab({
+  data,
+  totalVisits,
+  avgDaily,
+  peakDay,
+  preset,
+  rangeStart,
+  rangeEnd,
+  calendarDays,
+  loadError,
+}) {
+  const periodLine = `${preset} · ${formatDateShort(rangeStart)} – ${formatDateShort(rangeEnd)}`;
+  const peakDate =
+    peakDay.CountDate != null
+      ? formatDateShort(
+          typeof peakDay.CountDate === 'string'
+            ? peakDay.CountDate.slice(0, 10)
+            : String(peakDay.CountDate),
+        )
+      : null;
+
+  const daysWithData = data.length;
+  const chartSeries =
+    data.length <= 120 ? data : data.slice(-120);
+  const chartData = chartSeries.map((d) => ({
+    date: d.CountDate,
+    value: d.DonorVisits,
+  }));
+
   return (
     <div className="space-y-4 pt-2">
+      <p className="text-[11px] text-gwsa-text-muted leading-snug">
+        Same presets as Financials (This Month, Quarter, YTD, 12 Months).{' '}
+        <strong className="font-medium text-gwsa-text-secondary">In</strong> counts →{' '}
+        <code className="text-[10px] bg-gwsa-bg px-1 rounded">DonorVisits</code>
+        . Average = total ÷ {calendarDays} calendar days. Peak = max single-day In.
+      </p>
+
+      {loadError ? (
+        <div className="rounded-lg border border-gwsa-red/40 bg-gwsa-red/10 px-3 py-2 text-xs text-gwsa-red">
+          {loadError}
+        </div>
+      ) : null}
+
+      {!loadError && data.length === 0 ? (
+        <p className="text-sm text-gwsa-text-muted">
+          No door count rows for this store and date range. Confirm PeopleCounter data exists and the
+          location ID matches <code className="text-[11px] bg-gwsa-bg px-1 rounded">PCounter.LocationID</code>.
+        </p>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-3">
-        <MetricCard label="Total Visits" value={formatNumber(totalVisits)} color="blue" />
-        <MetricCard label="Daily Average" value={formatNumber(avgDaily)} color="green" />
-        <MetricCard label="Peak Day" value={formatNumber(peakDay.DonorVisits || 0)} subtext={peakDay.CountDate} color="amber" />
-        <MetricCard label="Data Points" value={formatNumber(data.length)} color="cyan" />
-      </div>
-      {data.length > 0 && (
-        <TrendChart
-          data={data.slice(-60).map(d => ({ date: d.CountDate, value: d.DonorVisits }))}
-          title="Daily Donor Visits"
-          lines={[{ key: 'value', color: '#06B6D4', name: 'Visits' }]}
-          chartType="bar"
+        <MetricCard
+          label="Total visits (In)"
+          value={formatNumber(totalVisits)}
+          color="blue"
+          subtext={periodLine}
         />
-      )}
+        <MetricCard
+          label="Daily average"
+          value={formatNumber(avgDaily)}
+          color="green"
+          subtext={`Total ÷ ${calendarDays} calendar days`}
+        />
+        <MetricCard
+          label="Peak day"
+          value={formatNumber(peakDay.DonorVisits || 0)}
+          subtext={peakDate ? `${peakDate} · highest In` : '—'}
+          color="amber"
+        />
+        <MetricCard
+          label="Days with data"
+          value={formatNumber(daysWithData)}
+          color="cyan"
+          subtext={
+            daysWithData < calendarDays
+              ? `${calendarDays} days in range · gaps have no counter rows`
+              : 'One row per day in range'
+          }
+        />
+      </div>
+
+      {!loadError && chartData.length > 0 ? (
+        <>
+          {data.length > 120 ? (
+            <p className="text-[10px] text-gwsa-text-muted -mt-1">
+              Showing last 120 days of {data.length} in chart.
+            </p>
+          ) : null}
+          <TrendChart
+            data={chartData}
+            title="Daily visits (In)"
+            lines={[{ key: 'value', color: '#06B6D4', name: 'Visits' }]}
+            chartType="bar"
+            dateAxisGranularity="day"
+          />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -372,7 +562,7 @@ function TrendsTab({ data }) {
     <div className="space-y-4 pt-2">
       <div className="flex flex-wrap gap-1.5">
         {metricOptions.map(m => (
-          <button key={m.key} onClick={() => toggleMetric(m.key)}
+          <button key={m.key} type="button" onClick={() => toggleMetric(m.key)}
             className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all duration-200 ${
               activeMetrics.includes(m.key)
                 ? 'text-white shadow-sm' : 'text-gwsa-text-muted bg-gwsa-bg-alt border border-gwsa-border hover:border-gwsa-border-light'
@@ -382,17 +572,19 @@ function TrendsTab({ data }) {
           </button>
         ))}
       </div>
-      {data.length > 0 && (
+      {data.length > 0 ? (
         <TrendChart
           data={data.map(d => ({
             date: d.PeriodMonth,
-            ...Object.fromEntries(activeMetrics.map(k => [k, d[k]]))
+            ...Object.fromEntries(activeMetrics.map(k => [k, d[k]])),
           }))}
           title="Multi-Metric Trends"
           lines={metricOptions.filter(m => activeMetrics.includes(m.key)).map(m => ({
             key: m.key, color: m.color, name: m.label,
           }))}
         />
+      ) : (
+        <p className="text-sm text-gwsa-text-muted pt-2">No trend data for this location yet.</p>
       )}
     </div>
   );

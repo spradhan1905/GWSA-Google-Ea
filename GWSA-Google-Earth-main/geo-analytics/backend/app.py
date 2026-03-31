@@ -78,7 +78,14 @@ def create_app():
     def health():
         return jsonify({
             "status": "ok",
-            "demo_mode": Config.DEMO_MODE,
+            "data_source": "sql",
+            "sql_database": Config.SQL_DATABASE,
+            "sql_sales_line_object": Config.SQL_SALES_LINE_OBJECT,
+            "sql_locations_table": Config.SQL_LOCATIONS_TABLE,
+            "sql_sales_core_category": Config.SQL_SALES_CORE_CATEGORY,
+            "sql_sales_unit_name_flexible": Config.SQL_SALES_UNIT_NAME_FLEXIBLE,
+            "sql_locations_minimal_join": Config.SQL_LOCATIONS_MINIMAL_JOIN,
+            "locations_source": Config.LOCATIONS_SOURCE,
             "gemini_configured": bool(Config.GEMINI_API_KEY),
         })
 
@@ -89,7 +96,7 @@ if __name__ == '__main__':
     app = create_app()
     print(f"\n  🌍 GWSA GeoAnalytics API")
     print(f"  📍 http://localhost:5000")
-    print(f"  🎭 Demo mode: {Config.DEMO_MODE}")
+    print(f"  📊 Metrics: SQL (SalesFact + static locations list)")
     print(f"  🤖 Gemini: {'configured' if Config.GEMINI_API_KEY else 'not configured'}\n")
     port = int(os.environ.get('PORT', '5000'))
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)

@@ -7,7 +7,6 @@ from marshmallow import ValidationError
 from middleware.security import (
     limiter, DoorCountQuerySchema, require_valid_store
 )
-from config import Config
 
 door_count_bp = Blueprint('door_count', __name__)
 
@@ -24,11 +23,6 @@ def get_door_count(store_id):
 
     start = params['start'].isoformat()
     end = params['end'].isoformat()
-
-    if Config.DEMO_MODE:
-        from db.mock_data import get_mock_door_count
-        data = get_mock_door_count(store_id, start, end)
-        return jsonify(data)
 
     try:
         from db.queries import get_door_count as db_get_door_count
