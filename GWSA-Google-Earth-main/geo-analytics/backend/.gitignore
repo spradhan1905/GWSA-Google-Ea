@@ -1,6 +1,7 @@
+# Environment files (secrets & templates — keep local only)
 .env
+.env.*
 *.env
-!.env.example
 venv/
 .venv/
 __pycache__/
