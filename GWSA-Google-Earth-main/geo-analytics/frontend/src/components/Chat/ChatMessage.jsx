@@ -42,13 +42,13 @@ export default function ChatMessage({ message }) {
           <p className="text-sm leading-relaxed">{message.content}</p>
         )}
 
-        {/* SQL Query Toggle */}
+        {/* Data action toggle */}
         {message.sqlUsed && (
           <div className="mt-2 pt-2 border-t border-gwsa-border">
             <button onClick={() => setShowSQL(!showSQL)}
               className="flex items-center gap-1 text-[10px] text-gwsa-text-muted hover:text-gwsa-text-secondary transition-colors">
               <Code className="w-3 h-3" />
-              SQL Query
+              Data Action
               {showSQL ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             </button>
             {showSQL && (

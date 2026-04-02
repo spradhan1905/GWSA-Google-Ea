@@ -31,8 +31,7 @@ export default function SidePanel({ location, open, onClose }) {
       end: localDateISO(end),
     };
   });
-  /** Drives API: only `This Month` uses JS_API SalesFactFinal; other presets use dbo.Financials. */
-  /** Default: This Month + JS_API SalesFactFinal (MTD Core Sales revenue). */
+  /** Drives API: This Month + Custom date range use TotalCoreTableFinal; Quarter/YTD/12 Months use dbo.Financials. */
   const [financialsPreset, setFinancialsPreset] = useState('This Month');
   const [financials, setFinancials] = useState([]);
   const [doorCount, setDoorCount] = useState([]);
@@ -66,7 +65,8 @@ export default function SidePanel({ location, open, onClose }) {
       try {
         const [finRes, dcRes, trRes] = await Promise.allSettled([
           fetchFinancials(location.id, dateRange.start, dateRange.end, {
-            thisMonth: financialsPreset === 'This Month',
+            thisMonth:
+              financialsPreset === 'This Month' || financialsPreset === 'Custom',
           }),
           fetchDoorCount(location.id, dateRange.start, dateRange.end),
           fetchTrends(location.id, 12),
@@ -111,7 +111,8 @@ export default function SidePanel({ location, open, onClose }) {
   if (!location) return null;
   const typeCfg = LOCATION_TYPE_CONFIG[location.type] || {};
 
-  const isThisMonthPreset = financialsPreset === 'This Month';
+  const usesTotalCoreDaily =
+    financialsPreset === 'This Month' || financialsPreset === 'Custom';
 
   // Revenue: daily rows (This Month / SalesFact) or monthly NetRevenue (legacy Financials)
   const totalRevenue = financials.reduce((s, f) => s + (f.NetRevenue || 0), 0);
@@ -219,7 +220,8 @@ export default function SidePanel({ location, open, onClose }) {
                   location={location}
                   data={financials}
                   totalRevenue={totalRevenue}
-                  isThisMonth={isThisMonthPreset}
+                  financialsPreset={financialsPreset}
+                  usesTotalCoreDaily={usesTotalCoreDaily}
                   totalIncome={totalIncome}
                   avgExpense={avgExpense}
                   totalDonated={totalDonated}
@@ -259,7 +261,8 @@ function FinancialsTab({
   location,
   data,
   totalRevenue,
-  isThisMonth,
+  financialsPreset,
+  usesTotalCoreDaily,
   totalIncome,
   avgExpense,
   totalDonated,
@@ -268,31 +271,28 @@ function FinancialsTab({
   ytdNetIncome,
 }) {
   const isRetail = location?.type === 'store';
+  const isThisMonth = financialsPreset === 'This Month';
 
-  // This Month only: MTD Revenue from JS_API SalesFactFinal (Core Sales daily sum).
-  if (isThisMonth) {
+  // This Month / custom range: daily Core Sales revenue from TotalCoreTableFinal.
+  if (usesTotalCoreDaily) {
+    const revenueLabel = isThisMonth ? 'MTD Revenue' : 'Revenue';
+    const revenueSub = isThisMonth
+      ? 'Core Sales · calendar month to date'
+      : 'Core Sales · selected date range';
+    const chartTitle = isThisMonth
+      ? 'Daily revenue (MTD)'
+      : 'Daily revenue (selected range)';
     return (
       <div className="space-y-4 pt-2">
         <MetricCard
-          label="MTD Revenue"
+          label={revenueLabel}
           value={formatCurrency(totalRevenue)}
           color="blue"
-          subtext="Core Sales · calendar month to date"
+          subtext={revenueSub}
         />
         {!isRetail && (
           <p className="text-xs text-gwsa-text-muted -mt-2">
-            MTD is tied to retail POS lines in sales data. Filter the list to <strong className="font-medium text-gwsa-text-secondary">Retail</strong> for store-level totals.
-          </p>
-        )}
-        {data.length === 0 && (
-          <p className="text-sm text-gwsa-text-muted">
-            No rows for this store in the selected range. Confirm GP{' '}
-            <code className="text-xs bg-gwsa-bg px-1 rounded">SalesCategoryFromGP</code> (set{' '}
-            <code className="text-xs bg-gwsa-bg px-1 rounded">SQL_SALES_CORE_CATEGORY</code> empty in{' '}
-            <code className="text-xs bg-gwsa-bg px-1 rounded">backend/.env</code> to test), or add{' '}
-            <code className="text-xs bg-gwsa-bg px-1 rounded">sold_store_id</code> /{' '}
-            <code className="text-xs bg-gwsa-bg px-1 rounded">sales_unit_name</code> in{' '}
-            <code className="text-xs bg-gwsa-bg px-1 rounded">static_locations.py</code>.
+            Retail POS totals in sales data. Filter the list to <strong className="font-medium text-gwsa-text-secondary">Retail</strong> for store-level totals.
           </p>
         )}
         {data.length > 0 && (
@@ -301,7 +301,7 @@ function FinancialsTab({
               date: d.SalesDate || d.PeriodMonth,
               value: d.NetRevenue,
             }))}
-            title="Daily revenue (MTD)"
+            title={chartTitle}
             lines={[{ key: 'value', color: '#3B82F6', name: 'Revenue' }]}
             dateAxisGranularity="day"
           />

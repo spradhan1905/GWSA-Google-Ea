@@ -28,7 +28,7 @@ api.interceptors.response.use(
 
 export const fetchLocations = () => api.get('/locations');
 
-/** thisMonth: when true, backend reads JS_API.dbo.SalesFactFinal (This Month preset only). */
+/** thisMonth: when true, backend uses TotalCoreTableFinal daily revenue for the given start/end (This Month or Custom range). */
 export const fetchFinancials = (storeId, start, end, { thisMonth = false } = {}) =>
   api.get(`/financials/${encodeURIComponent(storeId)}`, {
     params: { start, end, ...(thisMonth ? { this_month: true } : {}) },

@@ -21,13 +21,17 @@ class Config:
     SQL_DRIVER   = os.environ.get('SQL_DRIVER', '{ODBC Driver 17 for SQL Server}')
     # True = Trusted Connection / Windows Integrated Security (no SQL login; app must run as a Windows user allowed on SQL)
     SQL_USE_WINDOWS_AUTH = os.environ.get('SQL_USE_WINDOWS_AUTH', 'False').lower() == 'true'
-    # Line-level sales (daily POS). Full three-part name, e.g. JS_API.dbo.SalesFactFinal
+    # Line-level sales (daily POS). Full three-part name, e.g. JS_API.dbo.SalesFactFinal (legacy / other uses).
     SQL_SALES_LINE_OBJECT = os.environ.get('SQL_SALES_LINE_OBJECT', 'JS_API.dbo.SalesFactFinal')
+    # This Month MTD revenue: JS_API.dbo.TotalCoreTableFinal — [Unit] encodes location (e.g. 20-10-129-12000 → 129).
+    SQL_THIS_MONTH_REVENUE_OBJECT = os.environ.get(
+        'SQL_THIS_MONTH_REVENUE_OBJECT', 'JS_API.dbo.TotalCoreTableFinal'
+    ).strip()
     # Locations: "static" = backend/db/static_locations.py (no dbo.Locations table). "database" = SQL_LOCATIONS_TABLE in SQL.
     LOCATIONS_SOURCE = os.environ.get('LOCATIONS_SOURCE', 'static').strip().lower()
     # Used only when LOCATIONS_SOURCE=database
     SQL_LOCATIONS_TABLE = os.environ.get('SQL_LOCATIONS_TABLE', 'dbo.Locations')
-    # SalesFactFinal.SalesCategoryFromGP (e.g. Core Sales). Empty = do not filter by category (debug / non-GP data).
+    # This Month: must match TotalCoreTableFinal.[Category] OR [RevenueType]. Empty = no category filter.
     SQL_SALES_CORE_CATEGORY = os.environ.get('SQL_SALES_CORE_CATEGORY', 'Core Sales')
     # When true, match [sales unit name] if it equals our name OR either string contains the other (GP vs app naming).
     SQL_SALES_UNIT_NAME_FLEXIBLE = os.environ.get('SQL_SALES_UNIT_NAME_FLEXIBLE', 'True').lower() == 'true'

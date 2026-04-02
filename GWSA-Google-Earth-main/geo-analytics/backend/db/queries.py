@@ -6,19 +6,18 @@ Table/view names come from Config (env) and are validated before use in SQL text
 from db.connection import get_connection
 from config import Config
 from datetime import date, datetime, timedelta
-from typing import Tuple
+from typing import Optional, Tuple
 import decimal
 import json
 import re
 
 
-def _validated_sales_object() -> str:
-    """Allow only safe identifier characters for dbo.MyTable or schema.dbo.MyView."""
-    name = (Config.SQL_SALES_LINE_OBJECT or "").strip()
+def _validated_this_month_revenue_object() -> str:
+    """This Month MTD: JS_API.dbo.TotalCoreTableFinal (or env override)."""
+    name = (Config.SQL_THIS_MONTH_REVENUE_OBJECT or "").strip()
     if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
         raise ValueError(
-            "SQL_SALES_LINE_OBJECT must be set to your sales table/view "
-            "(e.g. JS_API.dbo.vw_DailySales)"
+            "SQL_THIS_MONTH_REVENUE_OBJECT must be set (e.g. JS_API.dbo.TotalCoreTableFinal)"
         )
     return name
 
@@ -88,6 +87,32 @@ def _sales_category_filter_sql() -> Tuple[str, tuple]:
 
 # Soldts may be DATETIME2 or Excel-style serial float (see sample_sales_file.xlsx). Plain CAST(... AS DATE) is NULL for float.
 SOLDTS_AS_DATE_SQL = "CAST(TRY_CONVERT(DATETIME, d.Soldts) AS DATE)"
+
+# TotalCoreTableFinal: daily [Date], [Revenue], [Unit] like 20-10-129-12000 (3rd hyphen segment = location id).
+# Do NOT use PARSENAME: it only matches 4-part codes; 3-part Units would map the wrong segment.
+TOTAL_CORE_DATE_SQL = "CAST(d.[Date] AS DATE)"
+TOTAL_CORE_UNIT_LOCATION_ID_SQL = (
+    "TRY_CAST(NULLIF(LTRIM(RTRIM(CAST("
+    "N'<r><s>' + REPLACE(REPLACE(REPLACE(REPLACE("
+    "LTRIM(RTRIM(CAST(d.[Unit] AS NVARCHAR(200)))), N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;'), "
+    "N'-', N'</s><s>') + N'</s></r>' AS XML).value('(/r/s)[3]', 'nvarchar(50)'))), N'') AS INT)"
+)
+
+
+def _total_core_category_filter_sql() -> Tuple[str, tuple]:
+    """TotalCoreTableFinal: filter on [Category] OR [RevenueType] (e.g. Core Sales). Empty = no filter."""
+    c = (Config.SQL_SALES_CORE_CATEGORY or "").strip()
+    if not c:
+        return "", ()
+    frag = (
+        " AND ( "
+        " LTRIM(RTRIM(CAST(d.[Category] AS NVARCHAR(200)))) COLLATE Latin1_General_CI_AI "
+        "= LTRIM(RTRIM(?)) COLLATE Latin1_General_CI_AI "
+        " OR LTRIM(RTRIM(CAST(d.[RevenueType] AS NVARCHAR(200)))) COLLATE Latin1_General_CI_AI "
+        "= LTRIM(RTRIM(?)) COLLATE Latin1_General_CI_AI "
+        ")"
+    )
+    return frag, (c, c)
 
 
 def _sales_unit_name_predicate_sql(unit: str) -> Tuple[str, tuple]:
@@ -180,7 +205,7 @@ def get_locations() -> list:
 
 def get_financials(store_id: str, start_date: str, end_date: str, this_month: bool = False) -> list:
     """
-    If this_month is True: Core Sales daily revenue from JS_API.dbo.SalesFactFinal (This Month UI).
+    If this_month is True: daily Core Sales revenue from JS_API.dbo.TotalCoreTableFinal (Date, Revenue, Unit, Category).
     Otherwise: monthly rollup from dbo.Financials (Quarter / YTD / 12 Months presets).
     Static locations mode has no dbo.Financials — non–This-Month presets return no rows.
     """
@@ -191,9 +216,42 @@ def get_financials(store_id: str, start_date: str, end_date: str, this_month: bo
     return _get_financials_legacy(store_id, start_date, end_date)
 
 
+def _total_core_join_pred_database() -> str:
+    """Match TotalCore [Unit] location id to loc.LocationID / SoldStoreId, or [sales unit name] to LocationName."""
+    uid = TOTAL_CORE_UNIT_LOCATION_ID_SQL
+    if Config.SQL_SALES_UNIT_NAME_FLEXIBLE:
+        return f"""
+         AND (
+              {uid} = TRY_CAST(loc.LocationID AS INT)
+           OR (
+                loc.SoldStoreId IS NOT NULL
+                AND {uid} = loc.SoldStoreId
+              )
+           OR (
+              LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI
+              = LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI
+           OR LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI LIKE
+              N'%' + LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI + N'%'
+           OR LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI LIKE
+              N'%' + LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI + N'%'
+         )"""
+    return f"""
+         AND (
+              {uid} = TRY_CAST(loc.LocationID AS INT)
+           OR (
+                loc.SoldStoreId IS NOT NULL
+                AND {uid} = loc.SoldStoreId
+              )
+           OR (
+              LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI
+              = LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI
+         )"""
+
+
 def _get_financials_this_month_sales(store_id: str, start_date: str, end_date: str) -> list:
     """
-    SUM(Revenue) per day from SalesFactFinal (structure: sample_sales_file.xlsx).
+    SUM(Revenue) per day from TotalCoreTableFinal ([Date], [Revenue], [Unit], [Category], [sales unit name]).
+    [Unit] uses hyphenated codes; location id is the 3rd segment (e.g. 20-10-129-12000 → 129).
 
     Static mode: filter by keys in db/static_locations.py (no dbo.Locations join).
     Database mode: INNER JOIN dbo.Locations (see SQL_LOCATIONS_* env).
@@ -201,135 +259,91 @@ def _get_financials_this_month_sales(store_id: str, start_date: str, end_date: s
     if Config.LOCATIONS_SOURCE == "static":
         return _get_financials_this_month_sales_static(store_id, start_date, end_date)
 
-    obj = _validated_sales_object()
+    obj = _validated_this_month_revenue_object()
     loc_tbl = _validated_locations_table()
     sid = (store_id or "").strip()
-    cat_sql, cat_params = _sales_category_filter_sql()
-
-    if Config.SQL_LOCATIONS_MINIMAL_JOIN:
-        if Config.SQL_SALES_UNIT_NAME_FLEXIBLE:
-            join_pred = """
-         AND (
-              LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI
-              = LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI
-           OR LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI LIKE
-              N'%' + LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI + N'%'
-           OR LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI LIKE
-              N'%' + LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI + N'%'
-           OR (
-                TRY_CAST(loc.LocationID AS INT) IS NOT NULL
-                AND d.SoldStoreId = TRY_CAST(loc.LocationID AS INT)
-              )
-         )"""
-        else:
-            join_pred = """
-         AND (
-              LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI
-              = LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI
-           OR (
-                TRY_CAST(loc.LocationID AS INT) IS NOT NULL
-                AND d.SoldStoreId = TRY_CAST(loc.LocationID AS INT)
-              )
-         )"""
-    else:
-        if Config.SQL_SALES_UNIT_NAME_FLEXIBLE:
-            join_pred = """
-         AND (
-              (loc.SoldStoreId IS NOT NULL AND d.SoldStoreId = loc.SoldStoreId)
-           OR (
-                NULLIF(LTRIM(RTRIM(loc.SalesStoreUnit)), N'') IS NOT NULL
-                AND LTRIM(RTRIM(CAST(d.[sales store unit] AS NVARCHAR(200)))) COLLATE Latin1_General_CI_AI
-                 = LTRIM(RTRIM(loc.SalesStoreUnit)) COLLATE Latin1_General_CI_AI
-              )
-           OR LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI
-              = LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI
-           OR LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI LIKE
-              N'%' + LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI + N'%'
-           OR LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI LIKE
-              N'%' + LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI + N'%'
-           OR (
-                TRY_CAST(loc.LocationID AS INT) IS NOT NULL
-                AND d.SoldStoreId = TRY_CAST(loc.LocationID AS INT)
-              )
-         )"""
-        else:
-            join_pred = """
-         AND (
-              (loc.SoldStoreId IS NOT NULL AND d.SoldStoreId = loc.SoldStoreId)
-           OR (
-                NULLIF(LTRIM(RTRIM(loc.SalesStoreUnit)), N'') IS NOT NULL
-                AND LTRIM(RTRIM(CAST(d.[sales store unit] AS NVARCHAR(200)))) COLLATE Latin1_General_CI_AI
-                 = LTRIM(RTRIM(loc.SalesStoreUnit)) COLLATE Latin1_General_CI_AI
-              )
-           OR LTRIM(RTRIM(CAST(d.[sales unit name] AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI
-              = LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI
-           OR (
-                TRY_CAST(loc.LocationID AS INT) IS NOT NULL
-                AND d.SoldStoreId = TRY_CAST(loc.LocationID AS INT)
-              )
-         )"""
+    cat_sql, cat_params = _total_core_category_filter_sql()
+    join_pred = _total_core_join_pred_database()
 
     sql = f"""
         SELECT
-            {SOLDTS_AS_DATE_SQL} AS SalesDate,
-            CAST(SUM(ISNULL(CAST(d.Revenue AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS NetRevenue
+            {TOTAL_CORE_DATE_SQL} AS SalesDate,
+            CAST(SUM(ISNULL(CAST(d.[Revenue] AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS NetRevenue
         FROM {obj} AS d
         INNER JOIN {loc_tbl} AS loc
           ON loc.LocationID = ?
         {join_pred}
         WHERE 1 = 1
         {cat_sql}
-          AND {SOLDTS_AS_DATE_SQL} >= CAST(? AS DATE)
-          AND {SOLDTS_AS_DATE_SQL} <= CAST(? AS DATE)
-        GROUP BY {SOLDTS_AS_DATE_SQL}
+          AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE)
+          AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)
+        GROUP BY {TOTAL_CORE_DATE_SQL}
         ORDER BY SalesDate
     """
     return _execute_query(sql, (sid, *cat_params, start_date, end_date))
 
 
 def _get_financials_this_month_sales_static(store_id: str, start_date: str, end_date: str) -> list:
-    """MTD rows from SalesFactFinal filtered by static store keys (no dbo.Locations)."""
+    """MTD rows from TotalCoreTableFinal filtered by static store keys (no dbo.Locations)."""
     from db.static_locations import get_static_store_meta, sales_unit_name_for_store
 
     meta = get_static_store_meta(store_id)
     if not meta:
         return []
 
-    obj = _validated_sales_object()
-    cat_sql, cat_params = _sales_category_filter_sql()
+    obj = _validated_this_month_revenue_object()
+    cat_sql, cat_params = _total_core_category_filter_sql()
     sold = meta.get("sold_store_id")
     ssu = meta.get("sales_store_unit")
+    uid = TOTAL_CORE_UNIT_LOCATION_ID_SQL
 
-    sum_rev = "CAST(SUM(ISNULL(CAST(d.Revenue AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS NetRevenue"
+    sum_rev = (
+        "CAST(SUM(ISNULL(CAST(d.[Revenue] AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS NetRevenue"
+    )
 
     if sold is not None:
         sql = f"""
             SELECT
-                {SOLDTS_AS_DATE_SQL} AS SalesDate,
+                {TOTAL_CORE_DATE_SQL} AS SalesDate,
                 {sum_rev}
             FROM {obj} AS d
-            WHERE d.SoldStoreId = ?
+            WHERE {uid} = ?
             {cat_sql}
-              AND {SOLDTS_AS_DATE_SQL} >= CAST(? AS DATE)
-              AND {SOLDTS_AS_DATE_SQL} <= CAST(? AS DATE)
-            GROUP BY {SOLDTS_AS_DATE_SQL}
+              AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE)
+              AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)
+            GROUP BY {TOTAL_CORE_DATE_SQL}
             ORDER BY SalesDate
         """
         return _execute_query(sql, (int(sold), *cat_params, start_date, end_date))
+
+    sid = (store_id or "").strip()
+    if sid.isdigit():
+        sql = f"""
+            SELECT
+                {TOTAL_CORE_DATE_SQL} AS SalesDate,
+                {sum_rev}
+            FROM {obj} AS d
+            WHERE {uid} = ?
+            {cat_sql}
+              AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE)
+              AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)
+            GROUP BY {TOTAL_CORE_DATE_SQL}
+            ORDER BY SalesDate
+        """
+        return _execute_query(sql, (int(sid), *cat_params, start_date, end_date))
 
     if ssu is not None and str(ssu).strip():
         ssu_s = str(ssu).strip()
         sql = f"""
             SELECT
-                {SOLDTS_AS_DATE_SQL} AS SalesDate,
+                {TOTAL_CORE_DATE_SQL} AS SalesDate,
                 {sum_rev}
             FROM {obj} AS d
-            WHERE LTRIM(RTRIM(CAST(d.[sales store unit] AS NVARCHAR(200)))) COLLATE Latin1_General_CI_AI
-                  = LTRIM(RTRIM(?)) COLLATE Latin1_General_CI_AI
+            WHERE CHARINDEX(LTRIM(RTRIM(?)), LTRIM(RTRIM(CAST(d.[Unit] AS NVARCHAR(200))))) > 0
             {cat_sql}
-              AND {SOLDTS_AS_DATE_SQL} >= CAST(? AS DATE)
-              AND {SOLDTS_AS_DATE_SQL} <= CAST(? AS DATE)
-            GROUP BY {SOLDTS_AS_DATE_SQL}
+              AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE)
+              AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)
+            GROUP BY {TOTAL_CORE_DATE_SQL}
             ORDER BY SalesDate
         """
         return _execute_query(sql, (ssu_s, *cat_params, start_date, end_date))
@@ -340,15 +354,15 @@ def _get_financials_this_month_sales_static(store_id: str, start_date: str, end_
     unit_sql, unit_params = _sales_unit_name_predicate_sql(unit)
     sql = f"""
         SELECT
-            {SOLDTS_AS_DATE_SQL} AS SalesDate,
+            {TOTAL_CORE_DATE_SQL} AS SalesDate,
             {sum_rev}
         FROM {obj} AS d
         WHERE 1 = 1
         {cat_sql}
         {unit_sql}
-          AND {SOLDTS_AS_DATE_SQL} >= CAST(? AS DATE)
-          AND {SOLDTS_AS_DATE_SQL} <= CAST(? AS DATE)
-        GROUP BY {SOLDTS_AS_DATE_SQL}
+          AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE)
+          AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)
+        GROUP BY {TOTAL_CORE_DATE_SQL}
         ORDER BY SalesDate
     """
     return _execute_query(sql, (*cat_params, *unit_params, start_date, end_date))
@@ -453,3 +467,197 @@ def get_donor_addresses(store_id: str) -> list:
         ORDER BY DonorID
     """
     return _execute_query(sql, (store_id,))
+
+
+def _coerce_number(value) -> float:
+    """Normalize DB numeric values to plain float for chat summaries."""
+    if value is None:
+        return 0.0
+    if isinstance(value, decimal.Decimal):
+        return float(value)
+    return float(value)
+
+
+def _month_start(day: Optional[date] = None) -> date:
+    current = day or date.today()
+    return current.replace(day=1)
+
+
+def _sum_field(rows: list, field: str) -> float:
+    return round(sum(_coerce_number(row.get(field)) for row in rows), 2)
+
+
+def _average_field(rows: list, field: str) -> float:
+    if not rows:
+        return 0.0
+    return round(_sum_field(rows, field) / len(rows), 2)
+
+
+def resolve_location_reference(reference: str) -> Optional[dict]:
+    """Resolve a store by id or fuzzy name match against approved locations."""
+    ref = (reference or "").strip().lower()
+    if not ref:
+        return None
+
+    locations = get_locations()
+
+    for loc in locations:
+        if str(loc.get("LocationID", "")).strip().lower() == ref:
+            return loc
+
+    exact_name_matches = [
+        loc for loc in locations
+        if str(loc.get("LocationName", "")).strip().lower() == ref
+    ]
+    if exact_name_matches:
+        return exact_name_matches[0]
+
+    contains_matches = [
+        loc for loc in locations
+        if ref in str(loc.get("LocationName", "")).strip().lower()
+    ]
+    if len(contains_matches) == 1:
+        return contains_matches[0]
+
+    return None
+
+
+def get_location_catalog(limit: int = 100) -> list:
+    """Compact location list for AI intent planning."""
+    catalog = []
+    for loc in get_locations()[:limit]:
+        catalog.append({
+            "id": str(loc.get("LocationID")),
+            "name": loc.get("LocationName"),
+            "type": loc.get("LocationType"),
+        })
+    return catalog
+
+
+def get_location_summary(store_id: str, today: Optional[date] = None) -> dict:
+    """Approved store summary used by chat instead of free-form SQL."""
+    current_day = today or date.today()
+    start_of_month = _month_start(current_day)
+    last_30_days = current_day - timedelta(days=29)
+    location = resolve_location_reference(store_id)
+    if not location:
+        return {}
+
+    financial_rows = get_financials(
+        str(location["LocationID"]),
+        start_of_month.isoformat(),
+        current_day.isoformat(),
+        this_month=True,
+    )
+    door_rows = get_door_count(
+        str(location["LocationID"]),
+        last_30_days.isoformat(),
+        current_day.isoformat(),
+    )
+
+    summary = {
+        "location_id": str(location["LocationID"]),
+        "location_name": location.get("LocationName"),
+        "location_type": location.get("LocationType"),
+        "timeframes": {
+            "revenue_start": start_of_month.isoformat(),
+            "revenue_end": current_day.isoformat(),
+            "door_count_start": last_30_days.isoformat(),
+            "door_count_end": current_day.isoformat(),
+        },
+        "metrics": {
+            "this_month_revenue": _sum_field(financial_rows, "NetRevenue"),
+            "last_30_days_door_count": int(round(_sum_field(door_rows, "DonorVisits"))),
+            "avg_daily_door_count_30d": _average_field(door_rows, "DonorVisits"),
+        },
+    }
+
+    if Config.LOCATIONS_SOURCE != "static":
+        trend_rows = get_trends(str(location["LocationID"]), 12)
+        summary["metrics"]["latest_month_revenue"] = (
+            _coerce_number(trend_rows[-1].get("NetRevenue")) if trend_rows else 0.0
+        )
+        summary["metrics"]["latest_month_door_count"] = (
+            int(round(_coerce_number(trend_rows[-1].get("DoorCount")))) if trend_rows else 0
+        )
+    return summary
+
+
+def compare_locations(metric: str, store_refs: list, today: Optional[date] = None) -> dict:
+    """Compare approved metrics across up to two locations."""
+    current_day = today or date.today()
+    resolved = []
+    for ref in store_refs[:2]:
+        loc = resolve_location_reference(ref)
+        if loc and all(str(existing["LocationID"]) != str(loc["LocationID"]) for existing in resolved):
+            resolved.append(loc)
+
+    if len(resolved) < 2:
+        return {"metric": metric, "locations": []}
+
+    comparisons = []
+    if metric == "door_count":
+        start = (current_day - timedelta(days=29)).isoformat()
+        end = current_day.isoformat()
+        for loc in resolved:
+            rows = get_door_count(str(loc["LocationID"]), start, end)
+            comparisons.append({
+                "location_id": str(loc["LocationID"]),
+                "location_name": loc.get("LocationName"),
+                "metric_value": int(round(_sum_field(rows, "DonorVisits"))),
+            })
+        timeframe = {"start": start, "end": end}
+    else:
+        start = _month_start(current_day).isoformat()
+        end = current_day.isoformat()
+        for loc in resolved:
+            rows = get_financials(str(loc["LocationID"]), start, end, this_month=True)
+            comparisons.append({
+                "location_id": str(loc["LocationID"]),
+                "location_name": loc.get("LocationName"),
+                "metric_value": _sum_field(rows, "NetRevenue"),
+            })
+        timeframe = {"start": start, "end": end}
+
+    ordered = sorted(comparisons, key=lambda item: item["metric_value"], reverse=True)
+    return {
+        "metric": metric,
+        "timeframe": timeframe,
+        "locations": comparisons,
+        "leader": ordered[0] if ordered else None,
+    }
+
+
+def rank_locations(metric: str, limit: int = 5, today: Optional[date] = None) -> dict:
+    """Rank locations by an approved metric using parameterized queries only."""
+    current_day = today or date.today()
+    locations = get_locations()
+    rows = []
+
+    if metric == "door_count":
+        start = (current_day - timedelta(days=29)).isoformat()
+        end = current_day.isoformat()
+        for loc in locations:
+            counts = get_door_count(str(loc["LocationID"]), start, end)
+            rows.append({
+                "location_id": str(loc["LocationID"]),
+                "location_name": loc.get("LocationName"),
+                "metric_value": int(round(_sum_field(counts, "DonorVisits"))),
+            })
+    else:
+        start = _month_start(current_day).isoformat()
+        end = current_day.isoformat()
+        for loc in locations:
+            financials = get_financials(str(loc["LocationID"]), start, end, this_month=True)
+            rows.append({
+                "location_id": str(loc["LocationID"]),
+                "location_name": loc.get("LocationName"),
+                "metric_value": _sum_field(financials, "NetRevenue"),
+            })
+
+    ranked = sorted(rows, key=lambda item: item["metric_value"], reverse=True)[:max(1, min(limit, 10))]
+    return {
+        "metric": metric,
+        "timeframe": {"start": start, "end": end},
+        "locations": ranked,
+    }

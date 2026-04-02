@@ -20,7 +20,7 @@ limiter = Limiter(
 class FinancialsQuerySchema(Schema):
     start = fields.Date(required=True)
     end   = fields.Date(required=True)
-    # When true, financials come from JS_API.dbo.SalesFactFinal (This Month preset only).
+    # When true, daily Core revenue comes from TotalCoreTableFinal for the requested start/end (This Month or custom range in UI).
     this_month = fields.Bool(load_default=False)
 
 class DoorCountQuerySchema(Schema):

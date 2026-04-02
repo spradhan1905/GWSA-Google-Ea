@@ -81,6 +81,7 @@ def create_app():
             "data_source": "sql",
             "sql_database": Config.SQL_DATABASE,
             "sql_sales_line_object": Config.SQL_SALES_LINE_OBJECT,
+            "sql_this_month_revenue_object": Config.SQL_THIS_MONTH_REVENUE_OBJECT,
             "sql_locations_table": Config.SQL_LOCATIONS_TABLE,
             "sql_sales_core_category": Config.SQL_SALES_CORE_CATEGORY,
             "sql_sales_unit_name_flexible": Config.SQL_SALES_UNIT_NAME_FLEXIBLE,
@@ -97,6 +98,6 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', '5000'))
     print(f"\n  GWSA GeoAnalytics API")
     print(f"  http://localhost:{port}")
-    print(f"  Metrics: SQL (SalesFact + static locations)")
+    print(f"  Metrics: SQL (TotalCore MTD + static locations)")
     print(f"  Gemini: {'configured' if Config.GEMINI_API_KEY else 'not configured'}\n")
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
