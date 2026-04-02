@@ -10,7 +10,7 @@ import { sendChatMessage } from '../../services/api';
 
 const WELCOME_MESSAGE = {
   role: 'assistant',
-  content: `Welcome to **GWSA GeoAnalytics AI** 👋\n\nI can help you analyze store performance, compare locations, and explore financial trends across all Goodwill of San Antonio locations.\n\nTry asking:\n• "Which store has the highest revenue this year?"\n• "Compare door counts for Fredericksburg vs Culebra"\n• "What's the expense ratio trend for our outlets?"`,
+  content: `Welcome to **GWSA GeoAnalytics AI**.\n\nI can help you analyze store performance, compare locations, and explore financial trends across all Goodwill of San Antonio locations.\n\nTry asking:\n• "Which store has the highest revenue this year?"\n• "Compare door counts for Fredericksburg vs Culebra"\n• "What's the expense ratio trend for our outlets?"`,
 };
 
 export default function ChatDrawer({ open, onClose, storeContext }) {

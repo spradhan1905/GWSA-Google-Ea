@@ -40,7 +40,7 @@ export default function Landing({ onEnter }) {
           <section className="space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
               <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Store & donor analytics on a living map
+              Store analytics on a living map
             </div>
             <div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-slate-900">
@@ -48,9 +48,8 @@ export default function Landing({ onEnter }) {
                 <span className="block text-sky-600">in one geospatial view.</span>
               </h1>
               <p className="mt-4 text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl">
-                GWSA GeoAnalytics brings retail stores, donation stations, outlets and donor
-                catchments together on a single map. Explore performance, traffic, and
-                community reach — visually.
+                GWSA GeoAnalytics brings retail stores, donation stations, and outlets
+                together on a single map. Explore financials, traffic, and trends — visually.
               </p>
             </div>
 
@@ -71,7 +70,7 @@ export default function Landing({ onEnter }) {
                 </p>
                 <p className="mt-1 text-2xl font-semibold text-slate-900">3</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Financials, donor traffic, and donor address heatmaps.
+                  Financials, door traffic, and multi-metric trends.
                 </p>
               </div>
               <div className="rounded-2xl border border-sky-500/40 bg-sky-50 p-4 shadow-sm">

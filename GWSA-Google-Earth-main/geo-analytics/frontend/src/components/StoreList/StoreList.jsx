@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { ExternalLink, ChevronRight, PanelLeftClose } from 'lucide-react';
-import { LOCATION_TYPE_CONFIG } from '../../data/stores';
+import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
 
 const TYPE_FILTERS = [
   { id: 'all', label: 'All' },
@@ -83,7 +83,8 @@ export default function StoreList({
       <div className="flex-1 overflow-y-auto">
         <ul className="divide-y divide-gwsa-border">
           {locations.map((loc) => {
-            const cfg = cfgAll[loc.type] || { label: loc.type, color: '#64748B', icon: '📍' };
+            const cfg = cfgAll[loc.type] || LOCATION_TYPE_FALLBACK;
+            const TypeIcon = cfg.Icon || LOCATION_TYPE_FALLBACK.Icon;
             const isSelected = selectedLocation?.id === loc.id;
             return (
               <li key={loc.id}>
@@ -99,10 +100,10 @@ export default function StoreList({
                   }`}
                 >
                   <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
+                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                     style={{ backgroundColor: `${cfg.color}20`, color: cfg.color }}
                   >
-                    {cfg.icon}
+                    <TypeIcon className="w-5 h-5" strokeWidth={1.75} aria-hidden />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gwsa-text truncate">{loc.name}</p>

@@ -2,13 +2,14 @@
  * GWSA GeoAnalytics — TrendChart
  * Recharts line/bar chart component for panel data.
  */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import {
   ResponsiveContainer, ComposedChart, Line, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
 
-/** Parse YYYY-MM-DD at local noon to avoid UTC shifting the calendar day. */
 const parseChartDate = (dateStr) => {
   if (!dateStr) return null;
   const s = String(dateStr);
@@ -54,22 +55,54 @@ const CustomTooltip = ({ active, payload, label, formatLabel }) => {
   );
 };
 
-export default function TrendChart({
-  data = [],
+function ChartBody({
+  data,
   title,
-  lines = [],
-  chartType = 'line',
-  /** 'day' for daily MTD points; 'month' for monthly PeriodMonth (default). */
-  dateAxisGranularity = 'month',
+  lines,
+  chartType,
+  dateAxisGranularity,
+  chartHeight,
+  fullscreenEnabled,
+  showFullscreenButton,
+  onRequestFullscreen,
+  onExitFullscreen,
 }) {
-  if (!data.length) return null;
-
   const axisFormat = makeAxisFormatter(dateAxisGranularity);
 
   return (
-    <div className="rounded-xl bg-gwsa-bg-alt/50 border border-gwsa-border p-4">
-      {title && <h3 className="text-xs font-semibold text-gwsa-text-secondary uppercase tracking-wider mb-3">{title}</h3>}
-      <ResponsiveContainer width="100%" height={200}>
+    <>
+      <div className="flex items-start justify-between gap-2 mb-3">
+        {title ? (
+          <h3 className="text-xs font-semibold text-gwsa-text-secondary uppercase tracking-wider flex-1 min-w-0">
+            {title}
+          </h3>
+        ) : (
+          <span />
+        )}
+        {fullscreenEnabled && showFullscreenButton && (
+          <button
+            type="button"
+            onClick={onRequestFullscreen}
+            className="shrink-0 inline-flex items-center justify-center p-1.5 rounded-lg border border-gwsa-border text-gwsa-text-muted hover:text-gwsa-accent hover:border-gwsa-accent/40 transition-colors"
+            aria-label="Fullscreen chart"
+            title="Fullscreen"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {fullscreenEnabled && !showFullscreenButton && onExitFullscreen && (
+          <button
+            type="button"
+            onClick={onExitFullscreen}
+            className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-gwsa-border text-xs text-gwsa-text-secondary hover:bg-gwsa-surface-hover"
+            aria-label="Exit fullscreen"
+          >
+            <Minimize2 className="w-3.5 h-3.5" />
+            Exit
+          </button>
+        )}
+      </div>
+      <ResponsiveContainer width="100%" height={chartHeight}>
         <ComposedChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1F2A42" vertical={false} />
           <XAxis
@@ -120,6 +153,85 @@ export default function TrendChart({
           ))}
         </ComposedChart>
       </ResponsiveContainer>
-    </div>
+    </>
+  );
+}
+
+export default function TrendChart({
+  data = [],
+  title,
+  lines = [],
+  chartType = 'line',
+  dateAxisGranularity = 'month',
+  fullscreenEnabled = true,
+  fullscreenChartHeight = 420,
+  embeddedChartHeight = 200,
+}) {
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+
+  useEffect(() => {
+    if (!fullscreenOpen) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setFullscreenOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [fullscreenOpen]);
+
+  useEffect(() => {
+    if (fullscreenOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [fullscreenOpen]);
+
+  if (!data.length) return null;
+
+  const chartProps = {
+    data,
+    title,
+    lines,
+    chartType,
+    dateAxisGranularity,
+    fullscreenEnabled,
+  };
+
+  return (
+    <>
+      <div className="rounded-xl bg-gwsa-bg-alt/50 border border-gwsa-border p-4">
+        <ChartBody
+          {...chartProps}
+          chartHeight={embeddedChartHeight}
+          showFullscreenButton
+          onRequestFullscreen={() => setFullscreenOpen(true)}
+        />
+      </div>
+      {fullscreenEnabled &&
+        fullscreenOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[400] flex flex-col bg-gwsa-bg/98 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Chart fullscreen"
+          >
+            <div className="flex-1 min-h-0 p-4 sm:p-8 overflow-auto">
+              <div className="max-w-6xl mx-auto h-full min-h-[min(70vh,600px)] rounded-xl border border-gwsa-border bg-gwsa-surface/80 p-4 sm:p-6">
+                <ChartBody
+                  {...chartProps}
+                  chartHeight={fullscreenChartHeight}
+                  showFullscreenButton={false}
+                  onExitFullscreen={() => setFullscreenOpen(false)}
+                />
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

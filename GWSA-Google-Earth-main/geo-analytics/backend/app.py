@@ -82,6 +82,7 @@ def create_app():
             "sql_database": Config.SQL_DATABASE,
             "sql_sales_line_object": Config.SQL_SALES_LINE_OBJECT,
             "sql_this_month_revenue_object": Config.SQL_THIS_MONTH_REVENUE_OBJECT,
+            "sql_retail_monthly_financial_object": Config.SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT,
             "sql_locations_table": Config.SQL_LOCATIONS_TABLE,
             "sql_sales_core_category": Config.SQL_SALES_CORE_CATEGORY,
             "sql_sales_unit_name_flexible": Config.SQL_SALES_UNIT_NAME_FLEXIBLE,

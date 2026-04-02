@@ -22,6 +22,17 @@ def _validated_this_month_revenue_object() -> str:
     return name
 
 
+def _validated_retail_monthly_financial_object() -> str:
+    """Quarter / YTD / 12 Months: JS_API.dbo.RetailStoreMonthlyFinancialSummary (or env override)."""
+    name = (Config.SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT or "").strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
+        raise ValueError(
+            "SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT must be set "
+            "(e.g. JS_API.dbo.RetailStoreMonthlyFinancialSummary)"
+        )
+    return name
+
+
 def _validated_locations_table() -> str:
     """Locations table (join key LocationID + display name for GP sales unit)."""
     name = (Config.SQL_LOCATIONS_TABLE or "").strip()
@@ -115,6 +126,49 @@ def _total_core_category_filter_sql() -> Tuple[str, tuple]:
     return frag, (c, c)
 
 
+def _retail_unit_name_predicate_sql(unit: str) -> Tuple[str, tuple]:
+    """Match RetailStoreMonthlyFinancialSummary.[Unit Name] to app store label."""
+    u = (unit or "").strip()
+    if not u:
+        return " AND 1 = 0", ()
+    col = "d.[Unit Name]"
+    if Config.SQL_SALES_UNIT_NAME_FLEXIBLE:
+        return (
+            " AND ( "
+            f" LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI "
+            " = LTRIM(RTRIM(?)) COLLATE Latin1_General_CI_AI "
+            " OR LTRIM(RTRIM(?)) COLLATE Latin1_General_CI_AI LIKE "
+            f" N'%' + LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI + N'%' "
+            f" OR LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI LIKE "
+            " N'%' + LTRIM(RTRIM(?)) COLLATE Latin1_General_CI_AI + N'%' "
+            ")",
+            (u, u, u),
+        )
+    return (
+        f" AND LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI "
+        "= LTRIM(RTRIM(?)) COLLATE Latin1_General_CI_AI",
+        (u,),
+    )
+
+
+def _retail_location_name_join_sql() -> str:
+    """JOIN predicate: [Unit Name] to loc.LocationName (same rules as sales unit name)."""
+    col = "d.[Unit Name]"
+    if Config.SQL_SALES_UNIT_NAME_FLEXIBLE:
+        return f"""
+         AND (
+              LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI
+              = LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI
+           OR LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI LIKE
+              N'%' + LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI + N'%'
+           OR LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI LIKE
+              N'%' + LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI + N'%'
+         )"""
+    return f"""
+         AND LTRIM(RTRIM(CAST({col} AS NVARCHAR(500)))) COLLATE Latin1_General_CI_AI
+              = LTRIM(RTRIM(loc.LocationName)) COLLATE Latin1_General_CI_AI"""
+
+
 def _sales_unit_name_predicate_sql(unit: str) -> Tuple[str, tuple]:
     """Match [sales unit name] to app/GP store label; flexible = substring either way."""
     u = (unit or "").strip()
@@ -205,15 +259,13 @@ def get_locations() -> list:
 
 def get_financials(store_id: str, start_date: str, end_date: str, this_month: bool = False) -> list:
     """
-    If this_month is True: daily Core Sales revenue from JS_API.dbo.TotalCoreTableFinal (Date, Revenue, Unit, Category).
-    Otherwise: monthly rollup from dbo.Financials (Quarter / YTD / 12 Months presets).
-    Static locations mode has no dbo.Financials — non–This-Month presets return no rows.
+    If this_month is True: daily Core Sales revenue from TotalCoreTableFinal.
+    Otherwise: monthly rollup from RetailStoreMonthlyFinancialSummary (Quarter / YTD / 12 Months / Custom),
+    matched by [Unit Name] to static LocationName or dbo.Locations.LocationName.
     """
     if this_month:
         return _get_financials_this_month_sales(store_id, start_date, end_date)
-    if Config.LOCATIONS_SOURCE == "static":
-        return []
-    return _get_financials_legacy(store_id, start_date, end_date)
+    return _get_financials_retail_monthly(store_id, start_date, end_date)
 
 
 def _total_core_join_pred_database() -> str:
@@ -368,17 +420,82 @@ def _get_financials_this_month_sales_static(store_id: str, start_date: str, end_
     return _execute_query(sql, (*cat_params, *unit_params, start_date, end_date))
 
 
-def _get_financials_legacy(store_id: str, start_date: str, end_date: str) -> list:
-    """Monthly financials from dbo.Financials (non–This Month presets)."""
-    sql = """
-        SELECT PeriodMonth, NetRevenue, NetIncome, ExpenseRatio,
-               DonatedGoodsRev, RetailRevenue
-        FROM dbo.Financials
-        WHERE LocationID = ?
-          AND PeriodMonth BETWEEN ? AND ?
-        ORDER BY PeriodMonth
+def _retail_monthly_select_columns() -> str:
+    """Shared SELECT body for RetailStoreMonthlyFinancialSummary (grouped by Year/Month)."""
+    return """
+        DATEFROMPARTS(d.[Year], d.[Month], 1) AS PeriodMonth,
+        CAST(SUM(ISNULL(d.[Total Revenue], 0)) AS DECIMAL(18, 2)) AS TotalRevenue,
+        CAST(SUM(ISNULL(d.[Total Revenue], 0)) AS DECIMAL(18, 2)) AS NetRevenue,
+        CAST(SUM(ISNULL(d.[Total Operating Expenses], 0)) AS DECIMAL(18, 2)) AS TotalOperatingExpenses,
+        CAST(SUM(ISNULL(d.[Total Personnel Expenses], 0)) AS DECIMAL(18, 2)) AS TotalPersonnelExpenses,
+        CAST(
+            SUM(ISNULL(d.[Total Operating Expenses], 0)) + SUM(ISNULL(d.[Total Personnel Expenses], 0))
+            AS DECIMAL(18, 2)
+        ) AS OperatingExpenses,
+        CAST(SUM(ISNULL(d.[Net Income], 0)) AS DECIMAL(18, 2)) AS NetIncome,
+        CAST(
+            CASE WHEN SUM(ISNULL(d.[Total Revenue], 0)) > 0
+                THEN (
+                    SUM(ISNULL(d.[Total Operating Expenses], 0)) + SUM(ISNULL(d.[Total Personnel Expenses], 0))
+                ) / NULLIF(CAST(SUM(ISNULL(d.[Total Revenue], 0)) AS DECIMAL(38, 10)), 0)
+                ELSE NULL END
+            AS DECIMAL(18, 4)
+        ) AS ExpenseRatio
     """
-    return _execute_query(sql, (store_id, start_date, end_date))
+
+
+def _get_financials_retail_monthly(store_id: str, start_date: str, end_date: str) -> list:
+    """Monthly rows from RetailStoreMonthlyFinancialSummary for the requested calendar-month span."""
+    obj = _validated_retail_monthly_financial_object()
+    month_lo = (
+        "DATEFROMPARTS(d.[Year], d.[Month], 1) >= "
+        "DATEFROMPARTS(YEAR(CAST(? AS DATE)), MONTH(CAST(? AS DATE)), 1)"
+    )
+    month_hi = (
+        "DATEFROMPARTS(d.[Year], d.[Month], 1) <= "
+        "DATEFROMPARTS(YEAR(CAST(? AS DATE)), MONTH(CAST(? AS DATE)), 1)"
+    )
+    month_params = (start_date, start_date, end_date, end_date)
+    cols = _retail_monthly_select_columns()
+
+    if Config.LOCATIONS_SOURCE == "static":
+        from db.static_locations import get_static_store_meta, sales_unit_name_for_store
+
+        meta = get_static_store_meta(store_id)
+        if not meta:
+            return []
+        unit = sales_unit_name_for_store(store_id)
+        if not unit:
+            return []
+        unit_sql, unit_params = _retail_unit_name_predicate_sql(unit)
+        sql = f"""
+            SELECT
+                {cols}
+            FROM {obj} AS d
+            WHERE {month_lo}
+              AND {month_hi}
+            {unit_sql}
+            GROUP BY d.[Year], d.[Month]
+            ORDER BY d.[Year], d.[Month]
+        """
+        return _execute_query(sql, (*month_params, *unit_params))
+
+    loc_tbl = _validated_locations_table()
+    sid = (store_id or "").strip()
+    join_name = _retail_location_name_join_sql()
+    sql = f"""
+        SELECT
+            {cols}
+        FROM {obj} AS d
+        INNER JOIN {loc_tbl} AS loc
+          ON loc.LocationID = ?
+        {join_name}
+        WHERE {month_lo}
+          AND {month_hi}
+        GROUP BY d.[Year], d.[Month]
+        ORDER BY d.[Year], d.[Month]
+    """
+    return _execute_query(sql, (sid, *month_params))
 
 
 def get_door_count(store_id: str, start_date: str, end_date: str) -> list:
@@ -407,12 +524,14 @@ def get_door_count(store_id: str, start_date: str, end_date: str) -> list:
 
 
 def get_trends(store_id: str, months: int = 12) -> list:
-    """Trend tab: monthly rollup from dbo.Financials + door counts (not JS_API SalesFact)."""
+    """Trend tab: monthly rollup from RetailStoreMonthlyFinancialSummary + door counts."""
     ids = _resolve_pcounter_location_ids(store_id)
     tbl = _validated_door_count_object()
     dcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_DATE, "SQL_DOOR_COUNT_COL_DATE")
     vcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_VISITS, "SQL_DOOR_COUNT_COL_VISITS")
     lcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_LOCATION, "SQL_DOOR_COUNT_COL_LOCATION")
+    obj = _validated_retail_monthly_financial_object()
+
     if ids:
         ph = ",".join("?" * len(ids))
         door_join = f"""
@@ -427,32 +546,94 @@ def get_trends(store_id: str, months: int = 12) -> list:
                 GROUP BY CAST({dcol} AS DATE)
             ) d
             GROUP BY DATEFROMPARTS(YEAR(CountDate), MONTH(CountDate), 1)
-        ) dc ON f.PeriodMonth = dc.MonthStart
+        ) dc ON agg.PeriodMonth = dc.MonthStart
         """
         door_params = tuple(ids)
     else:
         door_join = """
         LEFT JOIN (
             SELECT CAST(NULL AS DATE) AS MonthStart, CAST(0 AS INT) AS TotalVisits WHERE 1 = 0
-        ) dc ON f.PeriodMonth = dc.MonthStart
+        ) dc ON agg.PeriodMonth = dc.MonthStart
         """
         door_params = ()
+
+    agg_select = """
+                DATEFROMPARTS(d.[Year], d.[Month], 1) AS PeriodMonth,
+                CAST(SUM(ISNULL(d.[Total Revenue], 0)) AS DECIMAL(18, 2)) AS NetRevenue,
+                CAST(SUM(ISNULL(d.[Net Income], 0)) AS DECIMAL(18, 2)) AS NetIncome,
+                CAST(
+                    CASE WHEN SUM(ISNULL(d.[Total Revenue], 0)) > 0
+                        THEN (
+                            SUM(ISNULL(d.[Total Operating Expenses], 0))
+                            + SUM(ISNULL(d.[Total Personnel Expenses], 0))
+                        ) / NULLIF(CAST(SUM(ISNULL(d.[Total Revenue], 0)) AS DECIMAL(38, 10)), 0)
+                        ELSE NULL END
+                    AS DECIMAL(18, 4)
+                ) AS ExpenseRatio
+    """
+
+    month_cutoff = (
+        "DATEFROMPARTS(d.[Year], d.[Month], 1) >= DATEADD(MONTH, -?, GETDATE())"
+    )
+
+    if Config.LOCATIONS_SOURCE == "static":
+        from db.static_locations import get_static_store_meta, sales_unit_name_for_store
+
+        meta = get_static_store_meta(store_id)
+        if not meta:
+            return []
+        unit = sales_unit_name_for_store(store_id)
+        if not unit:
+            return []
+        unit_sql, unit_params = _retail_unit_name_predicate_sql(unit)
+        sql = f"""
+            SELECT
+                agg.PeriodMonth,
+                agg.NetRevenue,
+                agg.NetIncome,
+                agg.ExpenseRatio,
+                CAST(0 AS DECIMAL(18, 2)) AS DonatedGoodsRev,
+                CAST(0 AS DECIMAL(18, 2)) AS RetailRevenue,
+                ISNULL(dc.TotalVisits, 0) AS DoorCount
+            FROM (
+                SELECT
+                    {agg_select}
+                FROM {obj} AS d
+                WHERE {month_cutoff}
+                {unit_sql}
+                GROUP BY d.[Year], d.[Month]
+            ) AS agg
+            {door_join}
+            ORDER BY agg.PeriodMonth
+        """
+        return _execute_query(sql, (months, *unit_params) + door_params)
+
+    loc_tbl = _validated_locations_table()
+    sid = (store_id or "").strip()
+    join_name = _retail_location_name_join_sql()
     sql = f"""
         SELECT
-            f.PeriodMonth,
-            f.NetRevenue,
-            f.NetIncome,
-            f.ExpenseRatio,
-            f.DonatedGoodsRev,
-            f.RetailRevenue,
+            agg.PeriodMonth,
+            agg.NetRevenue,
+            agg.NetIncome,
+            agg.ExpenseRatio,
+            CAST(0 AS DECIMAL(18, 2)) AS DonatedGoodsRev,
+            CAST(0 AS DECIMAL(18, 2)) AS RetailRevenue,
             ISNULL(dc.TotalVisits, 0) AS DoorCount
-        FROM dbo.Financials f
+        FROM (
+            SELECT
+                {agg_select}
+            FROM {obj} AS d
+            INNER JOIN {loc_tbl} AS loc
+              ON loc.LocationID = ?
+            {join_name}
+            WHERE {month_cutoff}
+            GROUP BY d.[Year], d.[Month]
+        ) AS agg
         {door_join}
-        WHERE f.LocationID = ?
-          AND f.PeriodMonth >= DATEADD(MONTH, -?, GETDATE())
-        ORDER BY f.PeriodMonth
+        ORDER BY agg.PeriodMonth
     """
-    return _execute_query(sql, door_params + (store_id, months))
+    return _execute_query(sql, (sid, months) + door_params)
 
 
 def get_donor_addresses(store_id: str) -> list:
@@ -572,14 +753,13 @@ def get_location_summary(store_id: str, today: Optional[date] = None) -> dict:
         },
     }
 
-    if Config.LOCATIONS_SOURCE != "static":
-        trend_rows = get_trends(str(location["LocationID"]), 12)
-        summary["metrics"]["latest_month_revenue"] = (
-            _coerce_number(trend_rows[-1].get("NetRevenue")) if trend_rows else 0.0
-        )
-        summary["metrics"]["latest_month_door_count"] = (
-            int(round(_coerce_number(trend_rows[-1].get("DoorCount")))) if trend_rows else 0
-        )
+    trend_rows = get_trends(str(location["LocationID"]), 12)
+    summary["metrics"]["latest_month_revenue"] = (
+        _coerce_number(trend_rows[-1].get("NetRevenue")) if trend_rows else 0.0
+    )
+    summary["metrics"]["latest_month_door_count"] = (
+        int(round(_coerce_number(trend_rows[-1].get("DoorCount")))) if trend_rows else 0
+    )
     return summary
 
 

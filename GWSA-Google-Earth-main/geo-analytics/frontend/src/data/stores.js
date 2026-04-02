@@ -2,7 +2,12 @@
  * GWSA GeoAnalytics — Static Store Seed Data
  * Parsed from KML. Used as fallback when API is unavailable.
  * Retail/outlet and donation-station ids match PeopleCounter / org store IDs.
+ *
+ * Location type icons use Lucide (outline SVG) — same pattern as enterprise dashboards (e.g. Salesforce, Stripe)
+ * rather than emoji, which read as informal in product UIs.
  */
+import { Store, Package, Tag, Inbox, MapPin } from 'lucide-react';
+
 export const STORE_LOCATIONS = [
   { id: '130', name: 'Garden Ridge Donation Station', type: 'adc', manager: null, address: '5580 FM 3009, Schertz, San Antonio, Texas, 78154', lat: null, lng: null },
   { id: '131', name: 'Churchill Estates Donation Station', type: 'adc', manager: null, address: '15502 Huebner Rd, San Antonio, Texas, 78248', lat: null, lng: null },
@@ -43,9 +48,13 @@ export const STORE_LOCATIONS = [
   { id: '119', name: 'Rittiman Retail Store', type: 'store', manager: null, address: '6363 Rittiman Rd, San Antonio, TX 78218', lat: null, lng: null },
 ];
 
+/** Lucide icon component per location type (outline SVG). */
 export const LOCATION_TYPE_CONFIG = {
-  store:   { label: 'Retail Store', color: '#3B82F6', icon: '🏪' },
-  adc:     { label: 'Donation Center', color: '#10B981', icon: '📦' },
-  outlet:  { label: 'Outlet', color: '#F59E0B', icon: '🏷️' },
-  dropbox: { label: 'Drop Box', color: '#8B5CF6', icon: '📮' },
+  store:   { label: 'Retail Store', color: '#3B82F6', Icon: Store },
+  adc:     { label: 'Donation Center', color: '#10B981', Icon: Package },
+  outlet:  { label: 'Outlet', color: '#F59E0B', Icon: Tag },
+  dropbox: { label: 'Drop Box', color: '#8B5CF6', Icon: Inbox },
 };
+
+/** Fallback when type is unknown — same as map default pin. */
+export const LOCATION_TYPE_FALLBACK = { label: 'Location', color: '#64748B', Icon: MapPin };

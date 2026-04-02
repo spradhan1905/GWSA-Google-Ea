@@ -3,8 +3,8 @@
  * App header with logo, store search, and AI chat toggle.
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, MessageSquare, X, MapPin, Sparkles, ArrowLeft } from 'lucide-react';
-import { LOCATION_TYPE_CONFIG } from '../../data/stores';
+import { Search, MessageSquare, X, MapPin, Sparkles, ArrowLeft, Globe } from 'lucide-react';
+import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
 
 export default function TopBar({
   locations = [],
@@ -52,8 +52,8 @@ export default function TopBar({
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
         )}
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gwsa-accent to-blue-400 flex items-center justify-center shadow-glow">
-          <span className="text-base">🌍</span>
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gwsa-accent to-blue-400 flex items-center justify-center shadow-glow text-white">
+          <Globe className="w-4 h-4" aria-hidden />
         </div>
         <div className="hidden sm:block">
           <h1 className="text-sm font-bold text-gwsa-text leading-tight tracking-tight">
@@ -91,7 +91,8 @@ export default function TopBar({
         {focused && searchQuery && filtered.length > 0 && (
           <div ref={dropdownRef} className="absolute top-full left-0 right-0 mt-1 bg-gwsa-surface border border-gwsa-border rounded-xl shadow-panel overflow-hidden z-50 animate-fade-in">
             {filtered.map((loc) => {
-              const cfg = LOCATION_TYPE_CONFIG[loc.type] || {};
+              const cfg = LOCATION_TYPE_CONFIG[loc.type] || LOCATION_TYPE_FALLBACK;
+              const TypeIcon = cfg.Icon || LOCATION_TYPE_FALLBACK.Icon;
               return (
                 <button
                   key={loc.id}
@@ -102,9 +103,9 @@ export default function TopBar({
                   }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gwsa-surface-hover transition-colors text-left"
                 >
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm shrink-0"
-                    style={{ backgroundColor: `${cfg.color}20` }}>
-                    {cfg.icon}
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${cfg.color}20`, color: cfg.color }}>
+                    <TypeIcon className="w-4 h-4" strokeWidth={1.75} aria-hidden />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gwsa-text truncate">{loc.name}</p>

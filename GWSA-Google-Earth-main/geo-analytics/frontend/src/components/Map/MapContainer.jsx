@@ -5,7 +5,7 @@
  */
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RotateCcw, Ruler, Box } from 'lucide-react';
-import { LOCATION_TYPE_CONFIG } from '../../data/stores';
+import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
 import KmlOverlay from './KmlOverlay';
 
 const MAP_CENTER = { lat: 29.4241, lng: -98.4936 };
@@ -17,10 +17,11 @@ const MAP_ZOOM = 12;
 const MAP_STYLES = [];
 
 function createMarkerSVG(type, isSelected) {
-  const cfg = LOCATION_TYPE_CONFIG[type] || { color: '#3B82F6', icon: '📍' };
+  const cfg = LOCATION_TYPE_CONFIG[type] || LOCATION_TYPE_FALLBACK;
   const color = cfg.color;
   const size = isSelected ? 44 : 36;
   const glow = isSelected ? `<circle cx="${size/2}" cy="${size/2}" r="${size/2}" fill="${color}" opacity="0.25"/>` : '';
+  const innerR = Math.max(4, size / 2 - 11);
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size+8}" viewBox="0 0 ${size} ${size+8}">
@@ -31,7 +32,8 @@ function createMarkerSVG(type, isSelected) {
         </filter>
       </defs>
       <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 3}" fill="${color}" filter="url(#shadow)" stroke="white" stroke-width="2"/>
-      <text x="${size/2}" y="${size/2 + 1}" text-anchor="middle" dominant-baseline="central" font-size="${size * 0.4}">${cfg.icon}</text>
+      <circle cx="${size/2}" cy="${size/2}" r="${innerR}" fill="white" opacity="0.92"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${innerR * 0.45}" fill="${color}" opacity="0.95"/>
       <polygon points="${size/2 - 5},${size - 3} ${size/2},${size + 5} ${size/2 + 5},${size - 3}" fill="${color}"/>
     </svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;

@@ -27,6 +27,10 @@ class Config:
     SQL_THIS_MONTH_REVENUE_OBJECT = os.environ.get(
         'SQL_THIS_MONTH_REVENUE_OBJECT', 'JS_API.dbo.TotalCoreTableFinal'
     ).strip()
+    # Quarter / YTD / 12 Months: monthly store rollup (Unit Name matches static LocationName / DB Locations).
+    SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT = os.environ.get(
+        'SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT', 'JS_API.dbo.RetailStoreMonthlyFinancialSummary'
+    ).strip()
     # Locations: "static" = backend/db/static_locations.py (no dbo.Locations table). "database" = SQL_LOCATIONS_TABLE in SQL.
     LOCATIONS_SOURCE = os.environ.get('LOCATIONS_SOURCE', 'static').strip().lower()
     # Used only when LOCATIONS_SOURCE=database

@@ -40,9 +40,6 @@ export const fetchDoorCount = (storeId, start, end) =>
 export const fetchTrends = (storeId, months = 12) =>
   api.get(`/trends/${encodeURIComponent(storeId)}`, { params: { months } });
 
-export const fetchDonorAddresses = (storeId) =>
-  api.get(`/donor-addresses/${encodeURIComponent(storeId)}`);
-
 export const sendChatMessage = (message, storeContext, history) =>
   api.post('/chat', { message, store_context: storeContext, conversation_history: history });
 
