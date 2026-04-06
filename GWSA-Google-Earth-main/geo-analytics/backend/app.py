@@ -94,8 +94,11 @@ def create_app():
     return app
 
 
+# WSGI entrypoint for Gunicorn / Render (avoid double-initializing in __main__)
+app = create_app()
+
+
 if __name__ == '__main__':
-    app = create_app()
     port = int(os.environ.get('PORT', '5000'))
     print(f"\n  GWSA GeoAnalytics API")
     print(f"  http://localhost:{port}")
