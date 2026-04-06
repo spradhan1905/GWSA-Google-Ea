@@ -6,5 +6,6 @@ marshmallow==3.20.0
 python-dotenv==1.0.0
 google-generativeai==0.7.0
 gunicorn==25.3.0
-# SQL Server (Linux/Render: use Dockerfile + SQL_DRIVER= ODBC Driver 18; Windows dev: Driver 17)
-pyodbc==5.0.1
+# SQL Server. Pin Python ≤3.12 on Render (runtime.txt): pyodbc does not build on Python 3.14 yet.
+# Linux/Render Docker: SQL_DRIVER={ODBC Driver 18 for SQL Server}; Windows dev: often Driver 17.
+pyodbc==5.3.0

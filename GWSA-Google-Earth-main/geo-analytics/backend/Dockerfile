@@ -2,7 +2,8 @@
 # On Render: set Environment = Docker, Root Directory = geo-analytics/backend (or this folder),
 # and set SQL_DRIVER={ODBC Driver 18 for SQL Server} (Driver 18 matches msodbcsql18 below).
 
-FROM python:3.11-slim-bookworm
+# Keep in sync with runtime.txt (Native) so local Docker and Render behave similarly.
+FROM python:3.12-slim-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl gnupg \
