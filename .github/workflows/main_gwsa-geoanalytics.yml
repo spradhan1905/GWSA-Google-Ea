@@ -63,4 +63,4 @@ jobs:
         with:
           app-name: 'GWSA-GeoAnalytics'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_4498E0A1269D40F88D24961EBD753072 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_F6E5FD1C81284CEC95E2CA2A5110B6C0 }}
