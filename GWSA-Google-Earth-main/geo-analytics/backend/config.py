@@ -19,6 +19,8 @@ class Config:
     SQL_USERNAME = os.environ.get('SQL_USERNAME', '')
     SQL_PASSWORD = os.environ.get('SQL_PASSWORD', '')
     SQL_DRIVER   = os.environ.get('SQL_DRIVER', '{ODBC Driver 17 for SQL Server}')
+    SQL_ENCRYPT = os.environ.get('SQL_ENCRYPT', 'yes').strip()
+    SQL_TRUST_SERVER_CERTIFICATE = os.environ.get('SQL_TRUST_SERVER_CERTIFICATE', 'yes').strip()
     # True = Trusted Connection / Windows Integrated Security (no SQL login; app must run as a Windows user allowed on SQL)
     SQL_USE_WINDOWS_AUTH = os.environ.get('SQL_USE_WINDOWS_AUTH', 'False').lower() == 'true'
     # Line-level sales (daily POS). Full three-part name, e.g. JS_API.dbo.SalesFactFinal (legacy / other uses).
@@ -55,5 +57,10 @@ class Config:
     # Flask
     SECRET_KEY  = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-change-in-production')
     CORS_ORIGIN = os.environ.get('CORS_ORIGIN', 'http://localhost:5173')
+    CORS_ORIGINS = [
+        origin.strip()
+        for origin in os.environ.get('CORS_ORIGINS', CORS_ORIGIN).split(',')
+        if origin.strip()
+    ]
     DEBUG       = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
-
+    FORCE_HTTPS = os.environ.get('FORCE_HTTPS', 'False').lower() == 'true'

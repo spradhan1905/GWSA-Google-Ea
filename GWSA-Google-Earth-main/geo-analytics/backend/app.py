@@ -18,7 +18,7 @@ def create_app():
 
     # ─── CORS ─────────────────────────────────
     CORS(app,
-         origins=[Config.CORS_ORIGIN],
+         origins=Config.CORS_ORIGINS,
          methods=['GET', 'POST'],
          allow_headers=['Content-Type'],
          supports_credentials=False,
@@ -39,7 +39,7 @@ def create_app():
                 'connect-src': ["'self'"],
                 'frame-src': "'none'",
             }
-            Talisman(app, force_https=False, strict_transport_security=True,
+            Talisman(app, force_https=Config.FORCE_HTTPS, strict_transport_security=True,
                      content_security_policy=csp,
                      referrer_policy='strict-origin-when-cross-origin')
         except ImportError:

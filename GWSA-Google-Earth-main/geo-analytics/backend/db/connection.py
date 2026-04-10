@@ -29,14 +29,17 @@ def get_connection():
         not (Config.SQL_USERNAME or "").strip() or not (Config.SQL_PASSWORD or "").strip()
     ):
         raise RuntimeError(
-            "SQL login requires SQL_USERNAME and SQL_PASSWORD, or set SQL_USE_WINDOWS_AUTH=True "
-            "for Windows Integrated Security."
+            "SQL login requires SQL_USERNAME and SQL_PASSWORD in the environment. "
+            "On Render/Linux, Windows Integrated Security is not available—use a SQL Server login "
+            "(set SQL_USE_WINDOWS_AUTH=false or omit it). On Windows dev only, you may use "
+            "SQL_USE_WINDOWS_AUTH=true with Trusted_Connection."
         )
     base = (
         f"DRIVER={Config.SQL_DRIVER};"
         f"SERVER={Config.SQL_SERVER};"
         f"DATABASE={Config.SQL_DATABASE};"
-        "TrustServerCertificate=yes;"
+        f"Encrypt={Config.SQL_ENCRYPT};"
+        f"TrustServerCertificate={Config.SQL_TRUST_SERVER_CERTIFICATE};"
         "Connection Timeout=30;"
     )
     if Config.SQL_USE_WINDOWS_AUTH:
