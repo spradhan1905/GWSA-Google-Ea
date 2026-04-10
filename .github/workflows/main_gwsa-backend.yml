@@ -63,4 +63,4 @@ jobs:
         with:
           app-name: 'GWSA-backend'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_10169DF28D934A339568B86953BEF108 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_D50135B1A9624BB689360A38B03E1D93 }}
