@@ -16,7 +16,7 @@ _RAW: List[Dict[str, Any]] = [
     {"id": "144", "name": "Leon Springs Donation Station", "type": "adc", "address": "24200 IH 10 West, Suite 103, San Antonio, Texas, 78257", "lat": None, "lng": None},
     {"id": "165", "name": "SOHO Donation Station", "type": "adc", "address": "19903 Stone Oak Pkwy, Suite 111, San Antonio, Texas, 78258", "lat": None, "lng": None},
     {"id": "166", "name": "Oak Park Donation Station", "type": "adc", "address": "8001 N New Braunfels Ave, San Antonio, Texas, 78209", "lat": None, "lng": None},
-    {"id": "192", "name": "Parkwood Place Donation Station", "type": "adc", "address": None, "lat": None, "lng": None},
+    {"id": "192", "name": "Parkwood Place Donation Station", "type": "adc", "address": "2235 Thousand Oaks Dr, San Antonio TX 78232", "lat": None, "lng": None},
     {"id": "194", "name": "Lakeside Plaza Donation Station", "type": "adc", "address": "26212 Canyon Golf Rd, Suite 103, San Antonio, Texas, 78260", "lat": None, "lng": None},
     {"id": "154", "name": "Austin Hwy Retail Store", "type": "store", "address": "1533 Austin Highway, San Antonio, Texas 78218, USA", "lat": None, "lng": None},
     {"id": "147", "name": "Bandera Retail Store", "type": "store", "address": "11722 Quincy Lee Drive, San Antonio, Texas 78249, USA", "lat": None, "lng": None},
