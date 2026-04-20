@@ -1,8 +1,11 @@
 /**
  * GWSA GeoAnalytics — API Service
  * Axios base instance + all backend API calls.
+ * Attaches a Microsoft Entra Bearer token on every request (when auth is configured).
  */
 import axios from 'axios';
+import { getApiAccessToken } from '../auth/msalInstance';
+import { authConfigured } from '../auth/msalConfig';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 // If API_BASE_URL is empty, requests go to same-origin (/api/*).
@@ -11,15 +14,29 @@ const axiosBaseURL = `${API_BASE_URL}/api`.replace(/\/+$/, '/api');
 
 const api = axios.create({
   baseURL: axiosBaseURL,
-  timeout: 15000,
+  timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: authConfigured,
 });
 
-// Response interceptor for 429 rate limit handling
+// Request interceptor — attach MSAL access token if auth is configured
+api.interceptors.request.use(async (config) => {
+  if (!authConfigured) return config;
+  const token = await getApiAccessToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Response interceptor — handle 401 (expired token) and 429 (rate limit)
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 429) {
+    const status = err.response?.status;
+    if (status === 401) {
+      console.warn('[API] 401 Unauthorized — token may be missing or expired');
+    } else if (status === 429) {
       console.warn('[API] Rate limited — slow down');
     }
     return Promise.reject(err);

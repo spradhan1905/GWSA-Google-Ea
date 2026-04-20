@@ -17,11 +17,13 @@ def create_app():
     app.secret_key = Config.SECRET_KEY
 
     # ─── CORS ─────────────────────────────────
+    # Azure App Service has its own CORS layer (handles OPTIONS preflight before Easy Auth).
+    # Flask-CORS still runs for non-preflight responses and when running locally without App Service CORS.
     CORS(app,
          origins=Config.CORS_ORIGINS,
-         methods=['GET', 'POST'],
-         allow_headers=['Content-Type'],
-         supports_credentials=False,
+         methods=['GET', 'POST', 'OPTIONS'],
+         allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+         supports_credentials=True,
          max_age=3600)
 
     # ─── Rate Limiter ─────────────────────────

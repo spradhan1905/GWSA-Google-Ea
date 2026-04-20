@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { MsalProvider } from '@azure/msal-react';
 import Root from './Root';
+import { msalInstance, initMsal } from './auth/msalInstance';
 import './index.css';
 
 // Load Google Maps API dynamically from env
@@ -13,8 +15,14 @@ if (MAPS_KEY && MAPS_KEY !== 'your_maps_key_here') {
   document.head.appendChild(script);
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <Root />
-  </React.StrictMode>
-);
+// MSAL must finish handleRedirectPromise() before React renders so we never
+// render the app in a stale "not signed in" state right after a login redirect.
+initMsal().finally(() => {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <MsalProvider instance={msalInstance}>
+        <Root />
+      </MsalProvider>
+    </React.StrictMode>
+  );
+});

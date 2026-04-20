@@ -47,9 +47,17 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
       };
       setMessages(prev => [...prev, aiMsg]);
     } catch (err) {
-      const errorMsg = err.response?.status === 429
-        ? 'Rate limit reached. Please wait a moment before asking again.'
-        : 'Sorry, I encountered an error. Please try again.';
+      let errorMsg = 'Sorry, I encountered an error. Please try again.';
+      if (err.code === 'ECONNABORTED') {
+        errorMsg = 'The AI response is taking longer than expected. Please try again in a moment.';
+      } else if (typeof err.response?.data?.reply === 'string' && err.response.data.reply.trim()) {
+        errorMsg = err.response.data.reply;
+      } else if (err.response?.status === 429) {
+        errorMsg = err.response?.data?.error || 'Gemini quota or rate limit reached. Please wait and try again later.';
+      } else if (typeof err.response?.data?.error === 'string' && err.response.data.error.trim()) {
+        errorMsg = err.response.data.error;
+      }
+      console.error('[Chat] Request failed', err.response?.data || err.message || err);
       setMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
     } finally {
       setLoading(false);

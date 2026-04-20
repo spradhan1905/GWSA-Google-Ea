@@ -21,14 +21,16 @@ If no structured data is provided, answer generally and say what data is availab
 
 INTENT_ACTIONS = {"none", "location_summary", "compare_locations", "rank_locations"}
 INTENT_METRICS = {"revenue", "door_count"}
+RANK_HINTS = ("highest", "best", "top", "most", "lowest", "least")
+COMPARE_HINTS = ("compare", "vs", "versus", "against")
+SUMMARY_HINTS = ("summary", "how is", "how's", "performance", "doing")
 
 
 def _get_gemini_model():
-    
     try:
         import google.generativeai as genai
         genai.configure(api_key=Config.GEMINI_API_KEY)
-        return genai.GenerativeModel('gemini-1.5-flash')
+        return genai.GenerativeModel(Config.GEMINI_MODEL)
     except Exception:
         return None
 
@@ -95,87 +97,126 @@ def _history_to_text(history: list) -> str:
     return "\n".join(lines)
 
 
-def _plan_request(model, user_message: str, store_context: str, history: list) -> dict:
-    """Have the model choose from a small set of approved analytics actions."""
+def _match_store_names(user_message: str, catalog: list) -> list:
+    """Resolve up to two location names directly from the user message."""
+    text = (user_message or "").lower()
+    matches = []
+    for loc in catalog:
+        name = str(loc.get("name", "")).strip()
+        if not name:
+            continue
+        name_lc = name.lower()
+        normalized = re.sub(r"\s+retail store|\s+donation station|\s+store|\s+station", "", name_lc).strip()
+        if name_lc in text or (normalized and normalized in text):
+            if name not in matches:
+                matches.append(name)
+        if len(matches) >= 2:
+            break
+    return matches
+
+
+def _detect_metric(user_message: str) -> str:
+    text = (user_message or "").lower()
+    if any(word in text for word in ("door count", "door counts", "visits", "visitor", "donor")):
+        return "door_count"
+    return "revenue"
+
+
+def _plan_request(user_message: str, store_context: str, history: list) -> dict:
+    """Choose an approved analytics action with local heuristics to avoid extra Gemini calls."""
     from db.queries import get_location_catalog
 
     catalog = get_location_catalog(limit=60)
-    planning_prompt = f"""
-You are an intent router for GWSA GeoAnalytics.
-Choose one approved action only when the question clearly matches it.
+    text = (user_message or "").lower()
+    metric = _detect_metric(user_message)
+    store_names = _match_store_names(user_message, catalog)
+    use_viewing_store = bool(store_context) and any(token in text for token in ("this store", "selected store", "viewing", "here"))
 
-Allowed actions:
-- none
-- location_summary
-- compare_locations
-- rank_locations
+    numbers = re.findall(r"\b(\d{1,2})\b", text)
+    parsed_limit = int(numbers[0]) if numbers else 5
 
-Allowed metrics:
-- revenue
-- door_count
-
-Rules:
-- Use only the location names provided in the catalog.
-- use_viewing_store should be true only when the current viewed location is relevant.
-- compare_locations requires two store names.
-- rank_locations is for questions like "highest", "best", "top", or "which store has the most".
-- location_summary is for a single store's performance summary.
-- If uncertain, return action "none".
-- Return JSON only. No markdown.
-
-Current viewed location: {store_context or "none"}
-Recent conversation:
-{_history_to_text(history) or "none"}
-
-Location catalog:
-{json.dumps(catalog)}
-
-User question:
-{user_message}
-
-Return exactly this JSON shape:
-{{
-  "action": "none",
-  "metric": "revenue",
-  "store_names": [],
-  "use_viewing_store": false,
-  "limit": 5
-}}
-"""
-    try:
-        response = model.generate_content(planning_prompt)
-        plan = _extract_json_object(getattr(response, "text", ""))
-    except Exception:
-        plan = {}
-
-    action = plan.get("action", "none")
-    metric = plan.get("metric", "revenue")
-    store_names = plan.get("store_names") if isinstance(plan.get("store_names"), list) else []
-    limit = plan.get("limit", 5)
-
-    if action not in INTENT_ACTIONS:
+    if any(hint in text for hint in COMPARE_HINTS) and (len(store_names) >= 2 or (len(store_names) == 1 and use_viewing_store)):
+        action = "compare_locations"
+    elif any(hint in text for hint in RANK_HINTS):
+        action = "rank_locations"
+    elif len(store_names) == 1 or use_viewing_store or any(hint in text for hint in SUMMARY_HINTS):
+        action = "location_summary"
+    else:
         action = "none"
-    if metric not in INTENT_METRICS:
-        metric = "revenue"
-
-    cleaned_names = []
-    for name in store_names[:2]:
-        value = str(name).strip()
-        if value:
-            cleaned_names.append(value[:80])
-
-    try:
-        parsed_limit = int(limit)
-    except (TypeError, ValueError):
-        parsed_limit = 5
 
     return {
         "action": action,
         "metric": metric,
-        "store_names": cleaned_names,
-        "use_viewing_store": bool(plan.get("use_viewing_store")),
+        "store_names": [str(name).strip()[:80] for name in store_names[:2] if str(name).strip()],
+        "use_viewing_store": use_viewing_store,
         "limit": max(1, min(parsed_limit, 10)),
     }
+
+
+def _quota_fallback_reply(user_message: str, data_action: str, analytics_data: dict) -> str:
+    """Return a plain fallback answer when Gemini is unavailable but approved analytics data exists."""
+    if not data_action or not analytics_data:
+        return (
+            "Gemini is temporarily unavailable or has hit its quota limit. "
+            "The data request completed, but I could not generate a full AI narrative right now."
+        )
+
+    if data_action.startswith("rank_locations:"):
+        locations = analytics_data.get("locations") or []
+        metric = analytics_data.get("metric", "revenue")
+        if locations:
+            leader = locations[0]
+            value = leader.get("metric_value")
+            return (
+                f"Gemini is temporarily unavailable, but based on the approved analytics query, "
+                f"{leader.get('location_name')} is currently ranked highest for {metric} "
+                f"with a value of {value}."
+            )
+
+    if data_action.startswith("compare_locations:"):
+        leader = analytics_data.get("leader")
+        metric = analytics_data.get("metric", "revenue")
+        if leader:
+            return (
+                f"Gemini is temporarily unavailable, but the comparison completed. "
+                f"{leader.get('location_name')} leads for {metric} with a value of {leader.get('metric_value')}."
+            )
+
+    if data_action == "location_summary":
+        metrics = (analytics_data or {}).get("metrics") or {}
+        return (
+            "Gemini is temporarily unavailable, but the store summary completed. "
+            f"This month revenue is {metrics.get('this_month_revenue', 0)}, "
+            f"last 30 days door count is {metrics.get('last_30_days_door_count', 0)}, "
+            f"and average daily door count is {metrics.get('avg_daily_door_count_30d', 0)}."
+        )
+
+    return (
+        "Gemini is temporarily unavailable or has hit its quota limit. "
+        "The approved analytics request completed successfully."
+    )
+
+
+def _gemini_error_response(exc: Exception, data_action: str, analytics_data: dict):
+    """Map Gemini exceptions to useful HTTP responses for the frontend."""
+    message = str(exc).strip() or "Unknown AI service error."
+    lowered = message.lower()
+
+    if any(token in lowered for token in ("429", "quota", "rate limit", "resource exhausted", "too many requests")):
+        return jsonify(
+            error="Gemini quota or rate limit reached. Please wait or increase your Google AI Studio billing limits.",
+            reply=_quota_fallback_reply("", data_action, analytics_data),
+            sql_used=data_action,
+            data=analytics_data,
+        ), 429
+
+    if any(token in lowered for token in ("api key", "permission denied", "permission", "forbidden", "403", "401", "unauthorized")):
+        return jsonify(error=f"Gemini authentication or access error: {message}"), 502
+
+    if any(token in lowered for token in ("timeout", "timed out", "deadline exceeded", "connection", "unavailable", "503")):
+        return jsonify(error=f"Gemini network or availability error: {message}"), 504
+
+    return jsonify(error=f"AI service error: {message}"), 500
 
 
 def _execute_approved_action(plan: dict, store_context: str):
@@ -249,7 +290,7 @@ def chat():
             'data': None
         })
 
-    plan = _plan_request(model, user_message, store_context, history)
+    plan = _plan_request(user_message, store_context, history)
     data_action, analytics_data = _execute_approved_action(plan, store_context)
     full_prompt = _build_response_prompt(user_message, store_context, data_action, analytics_data)
 
@@ -261,7 +302,7 @@ def chat():
             'data': analytics_data
         })
     except Exception as e:
-        return jsonify(error=f"AI service error: {str(e)}"), 500
+        return _gemini_error_response(e, data_action, analytics_data)
 
 
 def _demo_reply(message: str, store_context: str = None) -> str:
