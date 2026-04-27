@@ -6,9 +6,20 @@
  * Location type icons use Lucide (outline SVG) — same pattern as enterprise dashboards (e.g. Salesforce, Stripe)
  * rather than emoji, which read as informal in product UIs.
  */
-import { Store, Package, Tag, Inbox, MapPin } from 'lucide-react';
+import { Store, Package, Tag, Building2, Inbox, MapPin } from 'lucide-react';
+
+export const CONSOLIDATED_LOCATION = {
+  id: 'CONSOLIDATED',
+  name: 'Goodwill SA Opportunity Center',
+  type: 'consolidated',
+  manager: null,
+  address: '343 W Houston St, San Antonio, TX 78205',
+  lat: 29.42695,
+  lng: -98.49739,
+};
 
 export const STORE_LOCATIONS = [
+  CONSOLIDATED_LOCATION,
   { id: '130', name: 'Garden Ridge Donation Station', type: 'adc', manager: null, address: '5580 FM 3009, Schertz, San Antonio, Texas, 78154', lat: null, lng: null },
   { id: '131', name: 'Churchill Estates Donation Station', type: 'adc', manager: null, address: '15502 Huebner Rd, San Antonio, Texas, 78248', lat: null, lng: null },
   { id: '139', name: 'Bandera Landing II Donation Station', type: 'adc', manager: null, address: '8010 Bandera Rd, San Antonio, Texas, 78250', lat: null, lng: null },
@@ -53,6 +64,7 @@ export const LOCATION_TYPE_CONFIG = {
   store:   { label: 'Retail Store', color: '#3B82F6', Icon: Store },
   adc:     { label: 'Donation Center', color: '#10B981', Icon: Package },
   outlet:  { label: 'Outlet', color: '#F59E0B', Icon: Tag },
+  consolidated: { label: 'Consolidated', color: '#6366F1', Icon: Building2 },
   dropbox: { label: 'Drop Box', color: '#8B5CF6', Icon: Inbox },
 };
 

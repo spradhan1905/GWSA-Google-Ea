@@ -19,6 +19,7 @@ const TABS = [
   { id: 'doorcount', label: 'Door Count', icon: DoorOpen },
   { id: 'trends', label: 'Trends', icon: BarChart3 },
 ];
+const CONSOLIDATED_ONLY_PRESETS = ['Rolling 3 months', 'YTD', '12 Months'];
 
 function monthSpanInclusive(startIso, endIso) {
   if (!startIso || !endIso) return 12;
@@ -26,6 +27,23 @@ function monthSpanInclusive(startIso, endIso) {
   const end = new Date(`${endIso}T12:00:00`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 12;
   return ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth()) + 1;
+}
+
+function rangeForPreset(presetLabel) {
+  const today = new Date();
+  let end = new Date(today);
+  let start = new Date(today.getFullYear(), today.getMonth(), 1);
+  if (presetLabel === 'YTD') {
+    end = new Date(today.getFullYear(), today.getMonth(), 0);
+    start = new Date(end.getFullYear(), 0, 1);
+  } else if (presetLabel === 'Rolling 3 months') {
+    end = new Date(today.getFullYear(), today.getMonth(), 0);
+    start = new Date(end.getFullYear(), end.getMonth() - 2, 1);
+  } else if (presetLabel === '12 Months') {
+    end = new Date(today.getFullYear(), today.getMonth(), 0);
+    start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
+  }
+  return { start: localDateISO(start), end: localDateISO(end) };
 }
 
 export default function SidePanel({ location, open, onClose }) {
@@ -46,16 +64,20 @@ export default function SidePanel({ location, open, onClose }) {
   const [trends, setTrends] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const isConsolidated = String(location?.id || '').toUpperCase() === 'CONSOLIDATED';
+  const availableTabs = isConsolidated
+    ? TABS.filter((tab) => tab.id !== 'doorcount')
+    : TABS;
 
-  // MTD range (calendar month to date) + This Month preset whenever the user picks a location
+  // Default range/preset whenever the user picks a location.
   useEffect(() => {
     if (!location?.id) return;
-    const end = new Date();
-    const start = new Date(end.getFullYear(), end.getMonth(), 1);
-    setDateRange({
-      start: localDateISO(start),
-      end: localDateISO(end),
-    });
+    if (isConsolidated) {
+      setDateRange(rangeForPreset('Rolling 3 months'));
+      setFinancialsPreset('Rolling 3 months');
+      return;
+    }
+    setDateRange(rangeForPreset('This Month'));
     setFinancialsPreset('This Month');
   }, [location?.id]);
 
@@ -80,9 +102,11 @@ export default function SidePanel({ location, open, onClose }) {
         const [finRes, dcRes, trRes] = await Promise.allSettled([
           fetchFinancials(location.id, dateRange.start, dateRange.end, {
             thisMonth:
-              financialsPreset === 'This Month' || financialsPreset === 'Custom',
+              !isConsolidated && (financialsPreset === 'This Month' || financialsPreset === 'Custom'),
           }),
-          fetchDoorCount(location.id, dateRange.start, dateRange.end),
+          isConsolidated
+            ? Promise.resolve({ data: [] })
+            : fetchDoorCount(location.id, dateRange.start, dateRange.end),
           fetchTrends(location.id, trendMonths),
         ]);
         if (finRes.status === 'fulfilled') setFinancials(finRes.value.data || []);
@@ -107,17 +131,21 @@ export default function SidePanel({ location, open, onClose }) {
       }
     };
     loadData();
-  }, [location?.id, dateRange.start, dateRange.end, financialsPreset]);
+  }, [location?.id, dateRange.start, dateRange.end, financialsPreset, isConsolidated]);
 
   // Reset tab on new location
   useEffect(() => { setActiveTab('financials'); }, [location?.id]);
+  useEffect(() => {
+    if (availableTabs.some((tab) => tab.id === activeTab)) return;
+    setActiveTab('financials');
+  }, [activeTab, availableTabs]);
 
   if (!location) return null;
   const typeCfg = LOCATION_TYPE_CONFIG[location.type] || LOCATION_TYPE_FALLBACK;
   const TypeIcon = typeCfg.Icon || LOCATION_TYPE_FALLBACK.Icon;
 
   const usesTotalCoreDaily =
-    financialsPreset === 'This Month' || financialsPreset === 'Custom';
+    !isConsolidated && (financialsPreset === 'This Month' || financialsPreset === 'Custom');
 
   // Revenue: daily NetRevenue (This Month / Custom) or monthly TotalRevenue (Rolling 3 months / YTD / 12 Months)
   const totalRevenue = financials.reduce(
@@ -189,13 +217,15 @@ export default function SidePanel({ location, open, onClose }) {
         </div>
 
         {/* Tabs */}
-        <MetricSelector tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+        <MetricSelector tabs={availableTabs} activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* Date Range */}
         <div className="shrink-0 px-5 py-2">
           <DateRangePicker
             dateRange={dateRange}
             preset={financialsPreset}
+            allowedPresets={isConsolidated ? CONSOLIDATED_ONLY_PRESETS : null}
+            showCustom={!isConsolidated}
             onChange={({ start, end, preset }) => {
               setDateRange({ start, end });
               setFinancialsPreset(preset);
@@ -247,6 +277,7 @@ export default function SidePanel({ location, open, onClose }) {
                   preset={financialsPreset}
                   financialsData={financials}
                   doorCountData={doorCount}
+                  includeDoorCount={!isConsolidated}
                 />
               )}
             </>
@@ -439,33 +470,35 @@ function DoorCountTab({
   );
 }
 
-function TrendsTab({ data, preset, financialsData, doorCountData }) {
+function TrendsTab({ data, preset, financialsData, doorCountData, includeDoorCount = true }) {
   const isThisMonth = preset === 'This Month';
   const metricOptions = isThisMonth
     ? [
         { key: 'NetRevenue', label: 'Revenue', color: '#3B82F6' },
-        { key: 'DoorCount', label: 'Door Count', color: '#06B6D4' },
+        ...(includeDoorCount ? [{ key: 'DoorCount', label: 'Door Count', color: '#06B6D4' }] : []),
       ]
     : [
         { key: 'NetIncome', label: 'Net Income', color: '#10B981' },
         { key: 'NetRevenue', label: 'Revenue', color: '#3B82F6' },
-        { key: 'DoorCount', label: 'Door Count', color: '#06B6D4' },
+        ...(includeDoorCount ? [{ key: 'DoorCount', label: 'Door Count', color: '#06B6D4' }] : []),
         { key: 'ExpenseRatio', label: 'Expense Ratio', color: '#F59E0B' },
       ];
   const [activeMetrics, setActiveMetrics] = useState(
-    isThisMonth ? ['NetRevenue', 'DoorCount'] : ['NetIncome', 'NetRevenue', 'DoorCount'],
+    isThisMonth
+      ? (includeDoorCount ? ['NetRevenue', 'DoorCount'] : ['NetRevenue'])
+      : (includeDoorCount ? ['NetIncome', 'NetRevenue', 'DoorCount'] : ['NetIncome', 'NetRevenue']),
   );
 
   useEffect(() => {
     const allowedKeys = isThisMonth
-      ? ['NetRevenue', 'DoorCount']
-      : ['NetIncome', 'NetRevenue', 'DoorCount', 'ExpenseRatio'];
+      ? (includeDoorCount ? ['NetRevenue', 'DoorCount'] : ['NetRevenue'])
+      : (includeDoorCount ? ['NetIncome', 'NetRevenue', 'DoorCount', 'ExpenseRatio'] : ['NetIncome', 'NetRevenue', 'ExpenseRatio']);
     setActiveMetrics((prev) => {
       const next = prev.filter((k) => allowedKeys.includes(k));
       if (next.length) return next;
       return [allowedKeys[0]];
     });
-  }, [isThisMonth]);
+  }, [isThisMonth, includeDoorCount]);
 
   const toggleMetric = (key) => {
     setActiveMetrics(prev =>
@@ -485,14 +518,16 @@ function TrendsTab({ data, preset, financialsData, doorCountData }) {
           current.NetRevenue += Number(row.NetRevenue || row.TotalRevenue || 0);
           byDate.set(key, current);
         });
-        doorCountData.forEach((row) => {
-          const dt = row.CountDate;
-          if (!dt) return;
-          const key = String(dt).slice(0, 10);
-          const current = byDate.get(key) || { date: key, NetRevenue: 0, DoorCount: 0 };
-          current.DoorCount += Number(row.DonorVisits || 0);
-          byDate.set(key, current);
-        });
+        if (includeDoorCount) {
+          doorCountData.forEach((row) => {
+            const dt = row.CountDate;
+            if (!dt) return;
+            const key = String(dt).slice(0, 10);
+            const current = byDate.get(key) || { date: key, NetRevenue: 0, DoorCount: 0 };
+            current.DoorCount += Number(row.DonorVisits || 0);
+            byDate.set(key, current);
+          });
+        }
         return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
       })()
     : data.map((d) => ({

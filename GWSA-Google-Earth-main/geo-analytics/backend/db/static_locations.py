@@ -10,6 +10,14 @@ Optional pcounter_location_ids: only if a site uses multiple PCounter LocationID
 from typing import Any, Dict, List, Optional
 
 _RAW: List[Dict[str, Any]] = [
+    {
+        "id": "CONSOLIDATED",
+        "name": "Goodwill SA Opportunity Center",
+        "type": "consolidated",
+        "address": "343 W Houston St, San Antonio, TX 78205",
+        "lat": 29.42695,
+        "lng": -98.49739,
+    },
     {"id": "130", "name": "Garden Ridge Donation Station", "type": "adc", "address": "5580 FM 3009, Schertz, San Antonio, Texas, 78154", "lat": None, "lng": None},
     {"id": "131", "name": "Churchill Estates Donation Station", "type": "adc", "address": "15502 Huebner Rd, San Antonio, Texas, 78248", "lat": None, "lng": None},
     {"id": "139", "name": "Bandera Landing II Donation Station", "type": "adc", "address": "8010 Bandera Rd, San Antonio, Texas, 78250", "lat": None, "lng": None},

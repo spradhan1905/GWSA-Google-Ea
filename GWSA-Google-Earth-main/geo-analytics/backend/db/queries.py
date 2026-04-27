@@ -11,6 +11,12 @@ import decimal
 import json
 import re
 
+CONSOLIDATED_LOCATION_ID = "CONSOLIDATED"
+
+
+def _is_consolidated_location(store_id: str) -> bool:
+    return (store_id or "").strip().upper() == CONSOLIDATED_LOCATION_ID
+
 
 def _validated_this_month_revenue_object() -> str:
     """This Month MTD: JS_API.dbo.TotalCoreTableFinal (or env override)."""
@@ -263,6 +269,8 @@ def get_financials(store_id: str, start_date: str, end_date: str, this_month: bo
     Otherwise: monthly rollup from RetailStoreMonthlyFinancialSummary (Quarter / YTD / 12 Months / Custom),
     matched by [Unit Name] to static LocationName or dbo.Locations.LocationName.
     """
+    if this_month and _is_consolidated_location(store_id):
+        return []
     if this_month:
         return _get_financials_this_month_sales(store_id, start_date, end_date)
     return _get_financials_retail_monthly(store_id, start_date, end_date)
@@ -458,6 +466,18 @@ def _get_financials_retail_monthly(store_id: str, start_date: str, end_date: str
     month_params = (start_date, start_date, end_date, end_date)
     cols = _retail_monthly_select_columns()
 
+    if _is_consolidated_location(store_id):
+        sql = f"""
+            SELECT
+                {cols}
+            FROM {obj} AS d
+            WHERE {month_lo}
+              AND {month_hi}
+            GROUP BY d.[Year], d.[Month]
+            ORDER BY d.[Year], d.[Month]
+        """
+        return _execute_query(sql, month_params)
+
     if Config.LOCATIONS_SOURCE == "static":
         from db.static_locations import get_static_store_meta, sales_unit_name_for_store
 
@@ -582,6 +602,29 @@ def get_trends(store_id: str, months: int = 12) -> list:
         "DATEFROMPARTS(d.[Year], d.[Month], 1) <= "
         "DATEFROMPARTS(YEAR(EOMONTH(GETDATE(), -1)), MONTH(EOMONTH(GETDATE(), -1)), 1)"
     )
+
+    if _is_consolidated_location(store_id):
+        sql = f"""
+            SELECT
+                agg.PeriodMonth,
+                agg.NetRevenue,
+                agg.NetIncome,
+                agg.ExpenseRatio,
+                CAST(0 AS DECIMAL(18, 2)) AS DonatedGoodsRev,
+                CAST(0 AS DECIMAL(18, 2)) AS RetailRevenue,
+                ISNULL(dc.TotalVisits, 0) AS DoorCount
+            FROM (
+                SELECT
+                    {agg_select}
+                FROM {obj} AS d
+                WHERE {month_window_start}
+                  AND {month_window_end}
+                GROUP BY d.[Year], d.[Month]
+            ) AS agg
+            {door_join}
+            ORDER BY agg.PeriodMonth
+        """
+        return _execute_query(sql, (months,) + door_params)
 
     if Config.LOCATIONS_SOURCE == "static":
         from db.static_locations import get_static_store_meta, sales_unit_name_for_store

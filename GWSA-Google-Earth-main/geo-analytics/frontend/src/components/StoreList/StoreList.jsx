@@ -9,10 +9,10 @@ import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores'
 
 const TYPE_FILTERS = [
   { id: 'all', label: 'All' },
+  { id: 'consolidated', label: 'Consolidated' },
   { id: 'store', label: 'Retail' },
   { id: 'adc', label: 'Donation' },
   { id: 'outlet', label: 'Outlet' },
-  { id: 'dropbox', label: 'Drop Box' },
 ];
 
 function getDirectionsUrl(loc) {

@@ -10,7 +10,16 @@ import SidePanel from './components/Panel/SidePanel';
 import ChatDrawer from './components/Chat/ChatDrawer';
 import LoadingSpinner from './components/Layout/LoadingSpinner';
 import { fetchLocations } from './services/api';
-import { STORE_LOCATIONS } from './data/stores';
+import { STORE_LOCATIONS, CONSOLIDATED_LOCATION } from './data/stores';
+
+function withConsolidatedLocation(list = []) {
+  const normalized = Array.isArray(list) ? list : [];
+  const hasConsolidated = normalized.some(
+    (loc) => String(loc?.id || '').toUpperCase() === CONSOLIDATED_LOCATION.id,
+  );
+  if (hasConsolidated) return normalized;
+  return [CONSOLIDATED_LOCATION, ...normalized];
+}
 
 export default function App({ onBackToLanding }) {
   const [locations, setLocations] = useState([]);
@@ -29,7 +38,7 @@ export default function App({ onBackToLanding }) {
         const res = await fetchLocations();
         const data = res.data;
         if (Array.isArray(data) && data.length > 0) {
-          setLocations(data.map(loc => ({
+          const mapped = data.map(loc => ({
             id: loc.LocationID,
             name: loc.LocationName,
             type: loc.LocationType,
@@ -37,12 +46,13 @@ export default function App({ onBackToLanding }) {
             address: loc.Address || loc.Address1 || null,
             lat: loc.Latitude,
             lng: loc.Longitude,
-          })));
+          }));
+          setLocations(withConsolidatedLocation(mapped));
         } else {
-          setLocations(STORE_LOCATIONS);
+          setLocations(withConsolidatedLocation(STORE_LOCATIONS));
         }
       } catch {
-        setLocations(STORE_LOCATIONS);
+        setLocations(withConsolidatedLocation(STORE_LOCATIONS));
       } finally {
         setLoading(false);
       }
