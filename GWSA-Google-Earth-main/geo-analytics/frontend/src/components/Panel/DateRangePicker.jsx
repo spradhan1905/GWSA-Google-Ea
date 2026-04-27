@@ -8,7 +8,7 @@ import { localDateISO } from '../../utils/dateUtils';
 
 const PRESETS = [
   { label: 'This Month', months: 1 },
-  { label: 'Quarter', months: 3 },
+  { label: 'Rolling 3 months', months: 3 },
   { label: 'YTD', months: 0 }, // special
   { label: '12 Months', months: 12 },
 ];
@@ -39,12 +39,20 @@ export default function DateRangePicker({ dateRange, onChange, preset: activePre
 
   const applyPreset = (preset) => {
     setCustomOpen(false);
-    let end = new Date();
+    const today = new Date();
+    let end = new Date(today);
     let start;
     if (preset.label === 'YTD') {
+      end = new Date(today.getFullYear(), today.getMonth(), 0); // last day of previous month
       start = new Date(end.getFullYear(), 0, 1);
     } else if (preset.label === 'This Month') {
       start = new Date(end.getFullYear(), end.getMonth(), 1);
+    } else if (preset.label === 'Rolling 3 months') {
+      end = new Date(today.getFullYear(), today.getMonth(), 0); // last day of previous month
+      start = new Date(end.getFullYear(), end.getMonth() - 2, 1);
+    } else if (preset.label === '12 Months') {
+      end = new Date(today.getFullYear(), today.getMonth(), 0); // last day of previous month
+      start = new Date(end.getFullYear(), end.getMonth() - 11, 1);
     } else {
       start = new Date();
       start.setMonth(start.getMonth() - preset.months);

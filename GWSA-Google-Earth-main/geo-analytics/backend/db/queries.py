@@ -572,8 +572,15 @@ def get_trends(store_id: str, months: int = 12) -> list:
                 ) AS ExpenseRatio
     """
 
-    month_cutoff = (
-        "DATEFROMPARTS(d.[Year], d.[Month], 1) >= DATEADD(MONTH, -?, GETDATE())"
+    # Use completed calendar months only (exclude current month).
+    # Example in April with months=3 -> Jan, Feb, Mar.
+    month_window_start = (
+        "DATEFROMPARTS(d.[Year], d.[Month], 1) >= "
+        "DATEADD(MONTH, 1 - ?, DATEFROMPARTS(YEAR(EOMONTH(GETDATE(), -1)), MONTH(EOMONTH(GETDATE(), -1)), 1))"
+    )
+    month_window_end = (
+        "DATEFROMPARTS(d.[Year], d.[Month], 1) <= "
+        "DATEFROMPARTS(YEAR(EOMONTH(GETDATE(), -1)), MONTH(EOMONTH(GETDATE(), -1)), 1)"
     )
 
     if Config.LOCATIONS_SOURCE == "static":
@@ -599,7 +606,8 @@ def get_trends(store_id: str, months: int = 12) -> list:
                 SELECT
                     {agg_select}
                 FROM {obj} AS d
-                WHERE {month_cutoff}
+                WHERE {month_window_start}
+                  AND {month_window_end}
                 {unit_sql}
                 GROUP BY d.[Year], d.[Month]
             ) AS agg
@@ -627,7 +635,8 @@ def get_trends(store_id: str, months: int = 12) -> list:
             INNER JOIN {loc_tbl} AS loc
               ON loc.LocationID = ?
             {join_name}
-            WHERE {month_cutoff}
+            WHERE {month_window_start}
+              AND {month_window_end}
             GROUP BY d.[Year], d.[Month]
         ) AS agg
         {door_join}

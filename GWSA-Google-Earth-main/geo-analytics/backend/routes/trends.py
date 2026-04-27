@@ -7,7 +7,6 @@ from marshmallow import ValidationError
 from middleware.security import (
     limiter, TrendsQuerySchema, require_valid_store
 )
-from config import Config
 
 trends_bp = Blueprint('trends', __name__)
 
@@ -23,9 +22,6 @@ def get_trends(store_id):
         return jsonify(error=err.messages), 400
 
     months = params['months']
-
-    if Config.LOCATIONS_SOURCE == "static":
-        return jsonify([])
 
     try:
         from db.queries import get_trends as db_get_trends

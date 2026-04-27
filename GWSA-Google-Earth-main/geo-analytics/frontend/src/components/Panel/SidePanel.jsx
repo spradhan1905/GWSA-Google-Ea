@@ -2,7 +2,7 @@
  * GWSA GeoAnalytics — Side Panel
  * Slide-in dashboard panel with financial/operational tabs.
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, TrendingUp, DoorOpen, BarChart3, ExternalLink } from 'lucide-react';
 import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
 import MetricCard from './MetricCard';
@@ -20,6 +20,14 @@ const TABS = [
   { id: 'trends', label: 'Trends', icon: BarChart3 },
 ];
 
+function monthSpanInclusive(startIso, endIso) {
+  if (!startIso || !endIso) return 12;
+  const start = new Date(`${startIso}T12:00:00`);
+  const end = new Date(`${endIso}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 12;
+  return ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth()) + 1;
+}
+
 export default function SidePanel({ location, open, onClose }) {
   const [activeTab, setActiveTab] = useState('financials');
   const [dateRange, setDateRange] = useState(() => {
@@ -30,7 +38,7 @@ export default function SidePanel({ location, open, onClose }) {
       end: localDateISO(end),
     };
   });
-  /** Drives API: This Month + Custom → TotalCoreTableFinal; Quarter/YTD/12 Months → RetailStoreMonthlyFinancialSummary. */
+  /** Drives API: This Month + Custom → TotalCoreTableFinal; Rolling 3 months/YTD/12 Months → RetailStoreMonthlyFinancialSummary. */
   const [financialsPreset, setFinancialsPreset] = useState('This Month');
   const [financials, setFinancials] = useState([]);
   const [doorCount, setDoorCount] = useState([]);
@@ -60,13 +68,22 @@ export default function SidePanel({ location, open, onClose }) {
     const loadData = async () => {
       setLoading(true);
       try {
+        const rangeMonths = Math.min(60, Math.max(1, monthSpanInclusive(dateRange.start, dateRange.end)));
+        const trendMonths =
+          financialsPreset === 'Rolling 3 months'
+            ? 3
+            : financialsPreset === '12 Months'
+              ? 12
+              : financialsPreset === 'YTD'
+                ? rangeMonths
+                : 12;
         const [finRes, dcRes, trRes] = await Promise.allSettled([
           fetchFinancials(location.id, dateRange.start, dateRange.end, {
             thisMonth:
               financialsPreset === 'This Month' || financialsPreset === 'Custom',
           }),
           fetchDoorCount(location.id, dateRange.start, dateRange.end),
-          fetchTrends(location.id, 12),
+          fetchTrends(location.id, trendMonths),
         ]);
         if (finRes.status === 'fulfilled') setFinancials(finRes.value.data || []);
         if (dcRes.status === 'fulfilled') {
@@ -102,7 +119,7 @@ export default function SidePanel({ location, open, onClose }) {
   const usesTotalCoreDaily =
     financialsPreset === 'This Month' || financialsPreset === 'Custom';
 
-  // Revenue: daily NetRevenue (This Month / Custom) or monthly TotalRevenue (Quarter / YTD / 12 Months)
+  // Revenue: daily NetRevenue (This Month / Custom) or monthly TotalRevenue (Rolling 3 months / YTD / 12 Months)
   const totalRevenue = financials.reduce(
     (s, f) => s + (f.TotalRevenue ?? f.NetRevenue ?? 0),
     0,
@@ -224,7 +241,14 @@ export default function SidePanel({ location, open, onClose }) {
                   loadError={doorCountError}
                 />
               )}
-              {activeTab === 'trends' && <TrendsTab data={trends} />}
+              {activeTab === 'trends' && (
+                <TrendsTab
+                  data={trends}
+                  preset={financialsPreset}
+                  financialsData={financials}
+                  doorCountData={doorCount}
+                />
+              )}
             </>
           )}
         </div>
@@ -286,7 +310,7 @@ function FinancialsTab({
     );
   }
 
-  // Quarter / YTD / 12 Months: RetailStoreMonthlyFinancialSummary (monthly rollups).
+  // Rolling 3 months / YTD / 12 Months: RetailStoreMonthlyFinancialSummary (monthly rollups).
   return (
     <div className="space-y-4 pt-2">
       <div className="grid grid-cols-2 gap-3">
@@ -345,7 +369,7 @@ function DoorCountTab({
   return (
     <div className="space-y-4 pt-2">
       <p className="text-[11px] text-gwsa-text-muted leading-snug">
-        Same presets as Financials (This Month, Quarter, YTD, 12 Months).{' '}
+        Same presets as Financials (This Month, Rolling 3 months, YTD, 12 Months).{' '}
         <strong className="font-medium text-gwsa-text-secondary">In</strong> counts →{' '}
         <code className="text-[10px] bg-gwsa-bg px-1 rounded">DonorVisits</code>
         . Average = total ÷ {calendarDays} calendar days. Peak = max single-day In.
@@ -415,38 +439,33 @@ function DoorCountTab({
   );
 }
 
-/** Illustrative 12-month series when API returns no rows (UI preview only). */
-function sampleTrendRows() {
-  const rows = [];
-  const now = new Date();
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-    const t = 11 - i;
-    rows.push({
-      PeriodMonth: iso,
-      NetIncome: 42000 + t * 1800,
-      NetRevenue: 175000 + t * 4200,
-      DoorCount: 820 + t * 45,
-      ExpenseRatio: 0.125 + t * 0.0012,
+function TrendsTab({ data, preset, financialsData, doorCountData }) {
+  const isThisMonth = preset === 'This Month';
+  const metricOptions = isThisMonth
+    ? [
+        { key: 'NetRevenue', label: 'Revenue', color: '#3B82F6' },
+        { key: 'DoorCount', label: 'Door Count', color: '#06B6D4' },
+      ]
+    : [
+        { key: 'NetIncome', label: 'Net Income', color: '#10B981' },
+        { key: 'NetRevenue', label: 'Revenue', color: '#3B82F6' },
+        { key: 'DoorCount', label: 'Door Count', color: '#06B6D4' },
+        { key: 'ExpenseRatio', label: 'Expense Ratio', color: '#F59E0B' },
+      ];
+  const [activeMetrics, setActiveMetrics] = useState(
+    isThisMonth ? ['NetRevenue', 'DoorCount'] : ['NetIncome', 'NetRevenue', 'DoorCount'],
+  );
+
+  useEffect(() => {
+    const allowedKeys = isThisMonth
+      ? ['NetRevenue', 'DoorCount']
+      : ['NetIncome', 'NetRevenue', 'DoorCount', 'ExpenseRatio'];
+    setActiveMetrics((prev) => {
+      const next = prev.filter((k) => allowedKeys.includes(k));
+      if (next.length) return next;
+      return [allowedKeys[0]];
     });
-  }
-  return rows;
-}
-
-function TrendsTab({ data }) {
-  const [activeMetrics, setActiveMetrics] = useState(['NetIncome', 'NetRevenue', 'DoorCount']);
-
-  const metricOptions = [
-    { key: 'NetIncome', label: 'Net Income', color: '#10B981' },
-    { key: 'NetRevenue', label: 'Revenue', color: '#3B82F6' },
-    { key: 'DoorCount', label: 'Door Count', color: '#06B6D4' },
-    { key: 'ExpenseRatio', label: 'Expense Ratio', color: '#F59E0B' },
-  ];
-
-  const sampleRows = useMemo(() => sampleTrendRows(), []);
-  const hasLive = data.length > 0;
-  const sourceRows = hasLive ? data : sampleRows;
+  }, [isThisMonth]);
 
   const toggleMetric = (key) => {
     setActiveMetrics(prev =>
@@ -454,10 +473,32 @@ function TrendsTab({ data }) {
     );
   };
 
-  const chartData = sourceRows.map((d) => ({
-    date: d.PeriodMonth,
-    ...Object.fromEntries(activeMetrics.map((k) => [k, d[k]])),
-  }));
+  const chartData = isThisMonth
+    ? (() => {
+        // This Month trends should use the same daily revenue rows as Financials.
+        const byDate = new Map();
+        financialsData.forEach((row) => {
+          const dt = row.SalesDate || row.PeriodMonth;
+          if (!dt) return;
+          const key = String(dt).slice(0, 10);
+          const current = byDate.get(key) || { date: key, NetRevenue: 0, DoorCount: 0 };
+          current.NetRevenue += Number(row.NetRevenue || row.TotalRevenue || 0);
+          byDate.set(key, current);
+        });
+        doorCountData.forEach((row) => {
+          const dt = row.CountDate;
+          if (!dt) return;
+          const key = String(dt).slice(0, 10);
+          const current = byDate.get(key) || { date: key, NetRevenue: 0, DoorCount: 0 };
+          current.DoorCount += Number(row.DonorVisits || 0);
+          byDate.set(key, current);
+        });
+        return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+      })()
+    : data.map((d) => ({
+        date: d.PeriodMonth,
+        ...Object.fromEntries(activeMetrics.map((k) => [k, d[k]])),
+      }));
 
   const lines = metricOptions
     .filter((m) => activeMetrics.includes(m.key))
@@ -465,13 +506,6 @@ function TrendsTab({ data }) {
 
   return (
     <div className="space-y-4 pt-2">
-      {!hasLive && (
-        <p className="text-[11px] text-gwsa-text-muted rounded-lg border border-gwsa-border/80 bg-gwsa-bg-alt/60 px-3 py-2 leading-snug">
-          <span className="font-medium text-gwsa-text-secondary">Sample preview</span>
-          {' — '}
-          Illustrative trend lines. When SQL returns monthly rows for this store, live metrics replace this preview.
-        </p>
-      )}
       <div className="flex flex-wrap gap-1.5">
         {metricOptions.map((m) => (
           <button
@@ -492,11 +526,14 @@ function TrendsTab({ data }) {
       {lines.length > 0 && chartData.length > 0 ? (
         <TrendChart
           data={chartData}
-          title={hasLive ? 'Multi-metric trends' : 'Multi-metric trends (sample)'}
+          title={isThisMonth ? 'Multi-metric trends (daily)' : 'Multi-metric trends'}
           lines={lines}
+          dateAxisGranularity={isThisMonth ? 'day' : 'month'}
         />
       ) : (
-        <p className="text-sm text-gwsa-text-muted pt-2">Select at least one metric above.</p>
+        <p className="text-sm text-gwsa-text-muted pt-2">
+          {lines.length === 0 ? 'Select at least one metric above.' : 'No trend data found for this location.'}
+        </p>
       )}
     </div>
   );
