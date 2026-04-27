@@ -171,6 +171,22 @@ export const STORE_OPS_INFO_BY_ID = {
     cell: '830-765-3096',
     assistantManagers: ['Kaye Massey', 'Brenda Rodriguez'],
   },
+  '129': {
+    directorName: 'MARTHA MEDINA',
+    directorTitle: 'Director DGR Store Operations',
+    directorPhone: '726-238-1542',
+    generalManager: 'Dee Dee Gonzales',
+    cell: '210-769-9271',
+    assistantManagers: ['Vivian Escobedo', 'Kim Baker'],
+  },
+  '115': {
+    directorName: 'HAKI AL-AZZAWI',
+    directorTitle: 'Sr. Director, DGR Operations',
+    directorPhone: '210-970-8554',
+    generalManager: 'Jillian Walker',
+    cell: '210-439-9012',
+    assistantManagers: ['Lana Lycan'],
+  },
   '150': {
     directorName: 'MARTHA MEDINA',
     directorTitle: 'Director of DGR Store Operations',
