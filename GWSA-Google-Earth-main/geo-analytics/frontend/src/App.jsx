@@ -11,6 +11,7 @@ import ChatDrawer from './components/Chat/ChatDrawer';
 import LoadingSpinner from './components/Layout/LoadingSpinner';
 import { fetchLocations } from './services/api';
 import { STORE_LOCATIONS, CONSOLIDATED_LOCATION } from './data/stores';
+import { FEATURES } from './config/features';
 
 function withConsolidatedLocation(list = []) {
   const normalized = Array.isArray(list) ? list : [];
@@ -112,6 +113,7 @@ export default function App({ onBackToLanding }) {
         onSearchSelect={handleSearchSelect}
         onChatToggle={() => setChatOpen(!chatOpen)}
         chatOpen={chatOpen}
+        aiEnabled={FEATURES.ai}
         onBackToLanding={onBackToLanding}
       />
 
@@ -148,11 +150,13 @@ export default function App({ onBackToLanding }) {
             onClose={handleClosePanel}
           />
 
-          <ChatDrawer
-            open={chatOpen}
-            onClose={() => setChatOpen(false)}
-            storeContext={selectedLocation?.name}
-          />
+          {FEATURES.ai && (
+            <ChatDrawer
+              open={chatOpen}
+              onClose={() => setChatOpen(false)}
+              storeContext={selectedLocation?.name}
+            />
+          )}
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ from marshmallow import ValidationError
 from middleware.security import (
     limiter, DoorCountQuerySchema, require_valid_store
 )
+from config import Config
 
 door_count_bp = Blueprint('door_count', __name__)
 
@@ -15,6 +16,9 @@ door_count_bp = Blueprint('door_count', __name__)
 @limiter.limit("30 per minute")
 @require_valid_store
 def get_door_count(store_id):
+    if not Config.ENABLE_KPIS:
+        return jsonify(error='KPI data is disabled for this environment'), 403
+
     schema = DoorCountQuerySchema()
     try:
         params = schema.load(request.args)

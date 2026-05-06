@@ -7,6 +7,7 @@ from marshmallow import ValidationError
 from middleware.security import (
     limiter, FinancialsQuerySchema, require_valid_store
 )
+from config import Config
 financials_bp = Blueprint('financials', __name__)
 
 
@@ -14,6 +15,9 @@ financials_bp = Blueprint('financials', __name__)
 @limiter.limit("30 per minute")
 @require_valid_store
 def get_financials(store_id):
+    if not Config.ENABLE_KPIS:
+        return jsonify(error='KPI data is disabled for this environment'), 403
+
     schema = FinancialsQuerySchema()
     try:
         params = schema.load(request.args)

@@ -24,6 +24,7 @@ import LoadingSpinner from '../Layout/LoadingSpinner';
 import { fetchFinancials, fetchDoorCount, fetchTrends } from '../../services/api';
 import { formatCurrency, formatPercent, formatNumber, getChangeIndicator } from '../../utils/formatters';
 import { localDateISO, calendarDaysInclusive, formatDateShort } from '../../utils/dateUtils';
+import { FEATURES } from '../../config/features';
 
 const TABS = [
   { id: 'financials', label: 'Financials', icon: TrendingUp },
@@ -31,6 +32,7 @@ const TABS = [
   { id: 'trends', label: 'Trends', icon: BarChart3 },
   { id: 'info', label: 'Info', icon: User },
 ];
+const KPI_TAB_IDS = new Set(['financials', 'doorcount', 'trends']);
 const CONSOLIDATED_ONLY_PRESETS = ['Rolling 3 months', 'YTD', '12 Months'];
 
 function monthSpanInclusive(startIso, endIso) {
@@ -80,6 +82,7 @@ export default function SidePanel({ location, open, onClose }) {
   const storeOpsInfo = STORE_OPS_INFO_BY_ID[String(location?.id ?? '')] || null;
   const isInfoEligible = location?.type === 'store' || location?.type === 'outlet';
   const availableTabs = TABS.filter((tab) => {
+    if (!FEATURES.kpis && KPI_TAB_IDS.has(tab.id)) return false;
     if (isConsolidated && tab.id === 'doorcount') return false;
     if (tab.id === 'info' && (!isInfoEligible || !storeOpsInfo)) return false;
     return true;
@@ -100,6 +103,15 @@ export default function SidePanel({ location, open, onClose }) {
   // Fetch data when location or date changes
   useEffect(() => {
     if (!location?.id || !dateRange.start || !dateRange.end) return;
+    if (!FEATURES.kpis) {
+      setFinancials([]);
+      setDoorCount([]);
+      setTrends([]);
+      setLoading(false);
+      setError(null);
+      setDoorCountError(null);
+      return;
+    }
     setError(null);
     setDoorCountError(null);
 
@@ -150,10 +162,12 @@ export default function SidePanel({ location, open, onClose }) {
   }, [location?.id, dateRange.start, dateRange.end, financialsPreset, isConsolidated]);
 
   // Reset tab on new location
-  useEffect(() => { setActiveTab('financials'); }, [location?.id]);
+  useEffect(() => {
+    setActiveTab(FEATURES.kpis ? 'financials' : availableTabs[0]?.id || null);
+  }, [location?.id]);
   useEffect(() => {
     if (availableTabs.some((tab) => tab.id === activeTab)) return;
-    setActiveTab('financials');
+    setActiveTab(availableTabs[0]?.id || null);
   }, [activeTab, availableTabs]);
 
   if (!location) return null;
@@ -233,10 +247,12 @@ export default function SidePanel({ location, open, onClose }) {
         </div>
 
         {/* Tabs */}
-        <MetricSelector tabs={availableTabs} activeTab={activeTab} onTabChange={setActiveTab} />
+        {availableTabs.length > 0 && (
+          <MetricSelector tabs={availableTabs} activeTab={activeTab} onTabChange={setActiveTab} />
+        )}
 
         {/* Date Range (hidden for static Info tab) */}
-        {activeTab !== 'info' && (
+        {FEATURES.kpis && activeTab !== 'info' && (
           <div className="shrink-0 px-5 py-2">
             <DateRangePicker
               dateRange={dateRange}
@@ -260,6 +276,12 @@ export default function SidePanel({ location, open, onClose }) {
           ) : error ? (
             <div className="flex items-center justify-center h-40">
               <p className="text-sm text-gwsa-red">{error}</p>
+            </div>
+          ) : !activeTab ? (
+            <div className="space-y-3 pt-4">
+              <p className="text-sm text-gwsa-text-muted">
+                This external view includes the map and location details only.
+              </p>
             </div>
           ) : (
             <>

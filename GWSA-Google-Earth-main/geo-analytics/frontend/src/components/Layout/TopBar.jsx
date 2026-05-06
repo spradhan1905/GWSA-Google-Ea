@@ -13,6 +13,7 @@ export default function TopBar({
   onSearchSelect,
   onChatToggle,
   chatOpen,
+  aiEnabled = true,
   onBackToLanding,
 }) {
   const [focused, setFocused] = useState(false);
@@ -122,17 +123,19 @@ export default function TopBar({
       </div>
 
       {/* AI Chat Toggle */}
-      <button
-        onClick={onChatToggle}
-        className={`flex items-center gap-2 h-9 px-3.5 rounded-lg text-sm font-medium transition-all duration-200 shrink-0 ${
-          chatOpen
-            ? 'bg-gwsa-accent text-white shadow-glow'
-            : 'bg-gwsa-bg-alt border border-gwsa-border text-gwsa-text-secondary hover:text-gwsa-text hover:border-gwsa-border-light'
-        }`}
-      >
-        <Sparkles className="w-4 h-4" />
-        <span className="hidden sm:inline">Ask AI</span>
-      </button>
+      {aiEnabled && (
+        <button
+          onClick={onChatToggle}
+          className={`flex items-center gap-2 h-9 px-3.5 rounded-lg text-sm font-medium transition-all duration-200 shrink-0 ${
+            chatOpen
+              ? 'bg-gwsa-accent text-white shadow-glow'
+              : 'bg-gwsa-bg-alt border border-gwsa-border text-gwsa-text-secondary hover:text-gwsa-text hover:border-gwsa-border-light'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span className="hidden sm:inline">Ask AI</span>
+        </button>
+      )}
     </header>
   );
 }

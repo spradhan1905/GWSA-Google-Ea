@@ -12,7 +12,18 @@ load_dotenv(_backend_dir / ".env")
 load_dotenv()  # optional: cwd .env overrides for local experiments
 
 
+def _env_bool(name, default=True):
+    value = os.environ.get(name)
+    if value is None or value == '':
+        return default
+    return value.strip().lower() not in {'false', '0', 'no', 'off'}
+
+
 class Config:
+    # Slot-controlled feature flags
+    ENABLE_AI = _env_bool('ENABLE_AI', True)
+    ENABLE_KPIS = _env_bool('ENABLE_KPIS', True)
+
     # SQL Server
     SQL_SERVER   = os.environ.get('SQL_SERVER', 'localhost')
     SQL_DATABASE = os.environ.get('SQL_DATABASE', 'GWSA_Analytics')

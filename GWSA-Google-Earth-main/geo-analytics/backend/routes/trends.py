@@ -7,6 +7,7 @@ from marshmallow import ValidationError
 from middleware.security import (
     limiter, TrendsQuerySchema, require_valid_store
 )
+from config import Config
 
 trends_bp = Blueprint('trends', __name__)
 
@@ -15,6 +16,9 @@ trends_bp = Blueprint('trends', __name__)
 @limiter.limit("30 per minute")
 @require_valid_store
 def get_trends(store_id):
+    if not Config.ENABLE_KPIS:
+        return jsonify(error='KPI data is disabled for this environment'), 403
+
     schema = TrendsQuerySchema()
     try:
         params = schema.load(request.args)

@@ -272,6 +272,9 @@ def _build_response_prompt(user_message: str, store_context: str, data_action: s
 @chat_bp.route('/api/chat', methods=['POST'])
 @limiter.limit("10 per minute")
 def chat():
+    if not Config.ENABLE_AI:
+        return jsonify(error='AI assistant is disabled for this environment'), 403
+
     schema = ChatRequestSchema()
     try:
         data = schema.load(request.get_json(force=True) or {})
