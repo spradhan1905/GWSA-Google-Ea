@@ -32,14 +32,20 @@ export default function StoreList({
   typeFilter,
   onTypeFilterChange,
   onCollapse,
+  dragHandleProps,
 }) {
   const cfgAll = LOCATION_TYPE_CONFIG;
 
   return (
     <div className="h-full flex flex-col bg-gwsa-surface/95 backdrop-blur-xl border border-gwsa-border sm:border-y-0 sm:border-l-0 sm:border-r w-full sm:w-[360px] shrink-0 overflow-hidden rounded-2xl sm:rounded-none shadow-panel sm:shadow-none transition-all duration-300 ease-out">
-      <div className="sm:hidden flex justify-center pt-2 pb-1">
+      <button
+        type="button"
+        aria-label="Drag down to close locations list"
+        className="sm:hidden flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing touch-none"
+        {...dragHandleProps}
+      >
         <span className="h-1 w-10 rounded-full bg-gwsa-border-light" aria-hidden />
-      </div>
+      </button>
 
       {/* Header: location context + count + collapse */}
       <div className="shrink-0 px-4 pt-3 sm:pt-4 pb-3 border-b border-gwsa-border flex items-center justify-between gap-2">

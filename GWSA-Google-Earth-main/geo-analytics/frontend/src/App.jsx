@@ -2,7 +2,7 @@
  * GWSA GeoAnalytics — App Root
  * Goodwill Industries of San Antonio
  */
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import TopBar from './components/Layout/TopBar';
 import StoreList from './components/StoreList/StoreList';
 import MapContainer from './components/Map/MapContainer';
@@ -14,6 +14,7 @@ import { STORE_LOCATIONS, CONSOLIDATED_LOCATION } from './data/stores';
 import { FEATURES } from './config/features';
 
 const MOBILE_LAYOUT_QUERY = '(max-width: 639px)';
+const DRAWER_DISMISS_DISTANCE = 90;
 
 function getIsMobileLayout() {
   return typeof window !== 'undefined' && window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
@@ -38,6 +39,9 @@ export default function App({ onBackToLanding }) {
   const [typeFilter, setTypeFilter] = useState('all');
   const [isMobileLayout, setIsMobileLayout] = useState(getIsMobileLayout);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => getIsMobileLayout());
+  const [drawerDragY, setDrawerDragY] = useState(0);
+  const [drawerDragging, setDrawerDragging] = useState(false);
+  const drawerDragRef = useRef({ active: false, startY: 0, currentY: 0 });
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -125,6 +129,42 @@ export default function App({ onBackToLanding }) {
     return list;
   }, [locations, searchQuery, typeFilter]);
 
+  const handleDrawerPointerDown = useCallback((event) => {
+    if (!isMobileLayout) return;
+
+    drawerDragRef.current = {
+      active: true,
+      startY: event.clientY,
+      currentY: event.clientY,
+    };
+    setDrawerDragging(true);
+    setDrawerDragY(0);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }, [isMobileLayout]);
+
+  const handleDrawerPointerMove = useCallback((event) => {
+    if (!drawerDragRef.current.active) return;
+
+    drawerDragRef.current.currentY = event.clientY;
+    setDrawerDragY(Math.max(0, event.clientY - drawerDragRef.current.startY));
+  }, []);
+
+  const finishDrawerDrag = useCallback(() => {
+    if (!drawerDragRef.current.active) return;
+
+    const distance = Math.max(
+      0,
+      drawerDragRef.current.currentY - drawerDragRef.current.startY,
+    );
+    drawerDragRef.current.active = false;
+    setDrawerDragging(false);
+
+    if (distance >= DRAWER_DISMISS_DISTANCE) {
+      setSidebarCollapsed(true);
+    }
+    setDrawerDragY(0);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gwsa-bg">
@@ -159,9 +199,10 @@ export default function App({ onBackToLanding }) {
           <div
             className={
               isMobileLayout
-                ? 'absolute inset-x-3 bottom-3 top-20 z-40 animate-slide-up'
+                ? `absolute inset-x-3 bottom-3 top-20 z-40 animate-slide-up ${drawerDragging ? 'transition-none' : 'transition-transform duration-200 ease-out'}`
                 : 'relative z-10 shrink-0'
             }
+            style={isMobileLayout && drawerDragY > 0 ? { transform: `translateY(${drawerDragY}px)` } : undefined}
           >
             <StoreList
               locations={filteredLocations}
@@ -170,6 +211,16 @@ export default function App({ onBackToLanding }) {
               typeFilter={typeFilter}
               onTypeFilterChange={setTypeFilter}
               onCollapse={() => setSidebarCollapsed(true)}
+              dragHandleProps={
+                isMobileLayout
+                  ? {
+                      onPointerDown: handleDrawerPointerDown,
+                      onPointerMove: handleDrawerPointerMove,
+                      onPointerUp: finishDrawerDrag,
+                      onPointerCancel: finishDrawerDrag,
+                    }
+                  : undefined
+              }
             />
           </div>
         )}

@@ -38,6 +38,44 @@ const formatTooltipValue = (value, name) => {
   return [value.toLocaleString(), name];
 };
 
+const getMetricUnit = (line) => {
+  const name = `${line.name || ''} ${line.key || ''}`;
+  if (/ratio|percent|margin/i.test(name)) return 'ratio';
+  if (/door|visit|count/i.test(name)) return 'count';
+  if (/revenue|income|expense|sales|cost|profit/i.test(name)) return 'currency';
+  return 'value';
+};
+
+const getAxisFormatter = (unit) => (value) => {
+  if (typeof value !== 'number') return value;
+  if (unit === 'ratio') return `${Math.round(value * 100)}%`;
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}m`;
+  if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
+  return value;
+};
+
+const getLineMax = (data, key) => Math.max(
+  0,
+  ...data
+    .map((row) => Number(row?.[key]))
+    .filter((value) => Number.isFinite(value))
+    .map((value) => Math.abs(value)),
+);
+
+const getAxisIdForLine = (line, index, primaryUnit, primaryMax, lineMax, usesDynamicAxes) => {
+  if (!usesDynamicAxes || index === 0) return 'primary';
+
+  const unit = getMetricUnit(line);
+  const magnitudeGap = primaryMax > 0 && lineMax > 0
+    ? Math.max(primaryMax, lineMax) / Math.min(primaryMax, lineMax)
+    : 1;
+
+  if (unit !== primaryUnit || magnitudeGap >= 6) {
+    return `axis-${line.key}`;
+  }
+  return 'primary';
+};
+
 const CustomTooltip = ({ active, payload, label, formatLabel }) => {
   if (!active || !payload?.length) return null;
   const fmt = formatLabel || makeAxisFormatter('month');
@@ -68,6 +106,19 @@ function ChartBody({
   onExitFullscreen,
 }) {
   const axisFormat = makeAxisFormatter(dateAxisGranularity);
+  const primaryLine = lines[0];
+  const primaryUnit = primaryLine ? getMetricUnit(primaryLine) : 'value';
+  const primaryMax = primaryLine ? getLineMax(data, primaryLine.key) : 0;
+  const usesDynamicAxes = lines.length > 1;
+  const linesWithAxes = lines.map((line, index) => {
+    const lineMax = getLineMax(data, line.key);
+    return {
+      ...line,
+      unit: getMetricUnit(line),
+      yAxisId: getAxisIdForLine(line, index, primaryUnit, primaryMax, lineMax, usesDynamicAxes),
+    };
+  });
+  const secondaryAxes = linesWithAxes.filter((line) => line.yAxisId !== 'primary');
 
   return (
     <>
@@ -103,7 +154,7 @@ function ChartBody({
         )}
       </div>
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <ComposedChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+        <ComposedChart data={data} margin={{ top: 5, right: secondaryAxes.length ? 14 : 5, bottom: 5, left: -10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1F2A42" vertical={false} />
           <XAxis
             dataKey="date"
@@ -114,11 +165,25 @@ function ChartBody({
             interval="preserveStartEnd"
           />
           <YAxis
+            yAxisId="primary"
             tick={{ fill: '#64748B', fontSize: 10 }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
+            tickFormatter={getAxisFormatter(primaryUnit)}
           />
+          {secondaryAxes.map((line, index) => (
+            <YAxis
+              key={line.yAxisId}
+              yAxisId={line.yAxisId}
+              orientation="right"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: line.color, fontSize: 10 }}
+              tickFormatter={getAxisFormatter(line.unit)}
+              width={index === 0 ? 28 : 0}
+              hide={index > 0}
+            />
+          ))}
           <Tooltip content={(tipProps) => <CustomTooltip {...tipProps} formatLabel={axisFormat} />} />
           {lines.length > 1 && (
             <Legend
@@ -127,12 +192,13 @@ function ChartBody({
               wrapperStyle={{ fontSize: '10px', color: '#94A3B8', paddingTop: '8px' }}
             />
           )}
-          {lines.map((line) => (
+          {linesWithAxes.map((line) => (
             chartType === 'bar' ? (
               <Bar
                 key={line.key}
                 dataKey={line.key}
                 name={line.name}
+                yAxisId={line.yAxisId}
                 fill={line.color}
                 fillOpacity={0.7}
                 radius={[2, 2, 0, 0]}
@@ -144,6 +210,7 @@ function ChartBody({
                 type="monotone"
                 dataKey={line.key}
                 name={line.name}
+                yAxisId={line.yAxisId}
                 stroke={line.color}
                 strokeWidth={2}
                 dot={false}
