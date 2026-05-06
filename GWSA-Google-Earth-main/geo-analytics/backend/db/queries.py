@@ -1198,6 +1198,67 @@ def rank_store_revenue(
     }
 
 
+def peak_store_daily_revenue(
+    start_date: str,
+    end_date: str,
+    *,
+    scope: str = "all_retail_stores",
+    timeframe_label: Optional[str] = None,
+    top_pairs: int = 5,
+) -> dict:
+    """
+    Best single calendar day Core revenue among scoped stores (TotalCore daily rows).
+    Historical months still use TotalCore daily in-range; avoids monthly-financial rollup for this intent.
+    """
+    _, scope_key = _retail_scope_filter(scope)
+    cap = max(1, min(int(top_pairs), 25))
+    obj_name = _validated_this_month_revenue_object()
+    cat = (Config.SQL_SALES_CORE_CATEGORY or "").strip()
+    filter_notes: List[str] = ["retail locations: store + outlet"] if scope_key == "all_retail_stores" else []
+    if cat:
+        filter_notes.append(f"Category/RevenueType = {cat}")
+
+    candidates: List[dict] = []
+    for loc in _iterate_scoped_locations(scope):
+        lid = str(loc["LocationID"])
+        rows = get_financials(lid, start_date, end_date, this_month=True)
+        for row in rows:
+            sd = row.get("SalesDate")
+            if sd is None:
+                continue
+            dk = sd.isoformat() if hasattr(sd, "isoformat") else str(sd)[:10]
+            rev = _coerce_number(row.get("NetRevenue"))
+            candidates.append({
+                "location_id": lid,
+                "location_name": loc.get("LocationName"),
+                "date": dk,
+                "metric_value": round(rev, 2),
+            })
+
+    candidates.sort(key=lambda x: x["metric_value"], reverse=True)
+    top = candidates[:cap]
+
+    tf = {"start": start_date, "end": end_date}
+    if timeframe_label:
+        tf["label"] = timeframe_label
+
+    return {
+        "metric": "revenue",
+        "grain": "single_store_day_peak",
+        "scope": scope_key,
+        "timeframe": tf,
+        "leader": top[0] if top else None,
+        "top_store_days": top,
+        "source": {
+            "name": obj_name,
+            "grain": "daily",
+            "metric": "NetRevenue per store per SalesDate",
+            "date_range": f"{start_date} to {end_date}",
+            "filters": filter_notes,
+        },
+    }
+
+
 def get_revenue_door_count_series(
     store_id: str,
     start_date: str,

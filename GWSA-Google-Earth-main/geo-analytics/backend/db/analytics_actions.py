@@ -13,6 +13,7 @@ from db.queries import (
     get_revenue_door_count_series,
     multi_metric_snapshot,
     network_correlation_revenue_door,
+    peak_store_daily_revenue,
     rank_door_count_days,
     rank_locations,
     rank_revenue_days,
@@ -77,6 +78,19 @@ def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[st
         data = compare_locations(metric, refs, timeframe=timeframe)
         if data.get("locations") and len(data["locations"]) >= 2:
             selected_action = f"compare_locations:{metric}"
+
+    elif action == "peak_store_daily_revenue":
+        if timeframe:
+            scope_arg = plan.get("scope") or "all_retail_stores"
+            data = peak_store_daily_revenue(
+                timeframe["start"],
+                timeframe["end"],
+                scope=scope_arg,
+                timeframe_label=timeframe.get("label"),
+                top_pairs=max(int(plan.get("limit") or 5), 5),
+            )
+            if data is not None:
+                selected_action = "peak_store_daily_revenue"
 
     elif action == "rank_time_periods":
         if timeframe:

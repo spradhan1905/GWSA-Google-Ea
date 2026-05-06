@@ -14,6 +14,7 @@ INTENT_ACTIONS = frozenset({
     "derived_metric",
     "data_catalog",
     "map_context_summary",
+    "peak_store_daily_revenue",
     "unsupported",
 })
 

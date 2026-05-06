@@ -213,6 +213,24 @@ def wants_multi_metric(text: str) -> bool:
     return hits >= 2
 
 
+def wants_peak_store_single_day_revenue(text: str) -> bool:
+    """Which store had the strongest one-day core revenue / sale in a calendar window."""
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    asks_store = bool(re.search(r"\b(which|what)\s+store\b", t))
+    asks_one_day_peak = (
+        "single day" in t or "one day" in t or "on a day" in t
+        or bool(re.search(
+            r"\b(highest|best|peak|strongest|max(?:imum)?|top|biggest)\b"
+            r"[^\n.]{0,60}\bon\b[^\n.]{0,40}\bday\b",
+            t,
+        ))
+    )
+    money = any(k in t for k in ("sale", "sales", "revenue"))
+    return asks_store and asks_one_day_peak and money
+
+
 def wants_rank_time_periods(user_message: str) -> bool:
     """True when the user ranks calendar days/dates rather than stores."""
     t = (user_message or "").strip().lower()
@@ -408,6 +426,11 @@ def plan_request(user_message: str, store_context: str, _history: list) -> dict:
     elif compare_ok:
         action = "compare_locations"
         intent = "compare_locations"
+
+    elif wants_peak_store_single_day_revenue(text_raw) and timeframe:
+        intent = "peak_store_daily_revenue"
+        action = "peak_store_daily_revenue"
+        grain = "store_day"
 
     elif wants_rank_time_periods(text_raw):
         intent = "rank_time_periods"

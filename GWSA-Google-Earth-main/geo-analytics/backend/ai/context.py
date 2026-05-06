@@ -14,9 +14,12 @@ def sources_from_payload(analytics_data: dict) -> list:
 
 
 def data_gap_code(plan: dict, data_action: str, analytics_data: dict):
-    if plan.get("intent") == "rank_time_periods" and not plan.get("timeframe"):
+    if plan.get("intent") in ("rank_time_periods", "peak_store_daily_revenue") and not plan.get("timeframe"):
         return "timeframe_required"
     if data_action and str(data_action).startswith("rank_periods:"):
         if isinstance(analytics_data, dict) and not (analytics_data.get("periods") or []):
+            return "no_daily_records_in_range"
+    if data_action == "peak_store_daily_revenue" and isinstance(analytics_data, dict):
+        if analytics_data.get("leader") is None:
             return "no_daily_records_in_range"
     return None

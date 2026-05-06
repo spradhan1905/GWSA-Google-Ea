@@ -33,9 +33,8 @@ def describe_data_gap(code: str) -> str:
 def timeframe_required_gap_body() -> dict:
     return {
         "reply": (
-            "That question asks for ranking by calendar day across stores; I need a specific time "
-            'period first (for example \"March\", \"March 2025\", \"last 30 days\", or \"this month\"). '
-            "Once you specify that, I can pull daily totals from the approved sales-by-day dataset."
+            "Please name a calendar window (for example \"March\", \"March 2025\", or \"last 30 days\") "
+            "so I can use the daily sales dataset for day-level questions or peak single-day store sales."
         ),
         "sql_used": None,
         "data": None,
@@ -166,6 +165,15 @@ def quota_fallback_reply(data_action: str, analytics_data: dict) -> str:
             "The AI service is temporarily unavailable; daily network correlation finished. "
             f"Pearson r={r_val}, overlap_days={overlap}."
         )
+
+    if data_action == "peak_store_daily_revenue":
+        leader = (analytics_data or {}).get("leader")
+        if leader:
+            return (
+                "The AI service is temporarily unavailable; peak single-store day query finished "
+                f"— **{leader.get('location_name')}** on **{leader.get('date')}**, "
+                f"{leader.get('metric_value')} (core revenue)."
+            )
 
     if data_action and data_action.startswith("derived:"):
         locs = (analytics_data or {}).get("locations") or []

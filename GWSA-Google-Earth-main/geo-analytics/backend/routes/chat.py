@@ -62,7 +62,7 @@ def chat():
     if plan.get("intent") == "unsupported":
         return jsonify(unsupported_question_body())
 
-    if plan.get("intent") == "rank_time_periods" and not plan.get("timeframe"):
+    if plan.get("intent") in ("rank_time_periods", "peak_store_daily_revenue") and not plan.get("timeframe"):
         return jsonify(timeframe_required_gap_body())
 
     if plan.get("intent") == "correlation_check" and not plan.get("timeframe"):
