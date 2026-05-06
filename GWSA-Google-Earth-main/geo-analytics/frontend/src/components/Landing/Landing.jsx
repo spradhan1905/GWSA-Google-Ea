@@ -75,7 +75,7 @@ export default function Landing({ onEnter }) {
               </div>
               <div className="rounded-2xl border border-sky-500/40 bg-sky-50 p-4 shadow-sm">
                 <p className="text-[11px] font-medium text-sky-700 uppercase tracking-[0.18em]">
-                  Gemini AI
+                  Azure OpenAI
                 </p>
                 <p className="mt-1 text-2xl font-semibold text-sky-700">Ask the map</p>
                 <p className="mt-1 text-xs text-sky-800/80">

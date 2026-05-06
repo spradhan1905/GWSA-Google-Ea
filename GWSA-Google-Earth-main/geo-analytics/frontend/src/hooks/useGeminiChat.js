@@ -1,6 +1,6 @@
 /**
  * GWSA GeoAnalytics — useGeminiChat hook
- * Manages chat state and Gemini API interactions.
+ * Manages chat state and backend AI interactions.
  */
 import { useState, useCallback } from 'react';
 import { sendChatMessage } from '../services/api';

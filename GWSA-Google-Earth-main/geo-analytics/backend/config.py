@@ -67,7 +67,7 @@ class Config:
     AZURE_OPENAI_API_KEY = os.environ.get('AZURE_OPENAI_API_KEY', '')
     AZURE_OPENAI_DEPLOYMENT = os.environ.get('AZURE_OPENAI_DEPLOYMENT', '').strip()
     AZURE_OPENAI_API_VERSION = os.environ.get(
-        'AZURE_OPENAI_API_VERSION', '2024-10-21-preview'
+        'AZURE_OPENAI_API_VERSION', '2025-01-01-preview'
     ).strip()
 
     # Gemini AI (legacy fallback for older local environments)

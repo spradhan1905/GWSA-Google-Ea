@@ -81,6 +81,14 @@ def create_app():
         return jsonify({
             "status": "ok",
             "data_source": "sql",
+            "ai_provider": "azure_openai" if Config.AZURE_OPENAI_API_KEY else "gemini" if Config.GEMINI_API_KEY else "demo",
+            "azure_openai_configured": bool(
+                Config.AZURE_OPENAI_ENDPOINT
+                and Config.AZURE_OPENAI_API_KEY
+                and Config.AZURE_OPENAI_DEPLOYMENT
+                and Config.AZURE_OPENAI_API_VERSION
+            ),
+            "azure_openai_deployment": Config.AZURE_OPENAI_DEPLOYMENT,
             "sql_database": Config.SQL_DATABASE,
             "sql_sales_line_object": Config.SQL_SALES_LINE_OBJECT,
             "sql_this_month_revenue_object": Config.SQL_THIS_MONTH_REVENUE_OBJECT,
@@ -105,5 +113,9 @@ if __name__ == '__main__':
     print(f"\n  GWSA GeoAnalytics API")
     print(f"  http://localhost:{port}")
     print(f"  Metrics: SQL (TotalCore MTD + static locations)")
-    print(f"  Gemini: {'configured' if Config.GEMINI_API_KEY else 'not configured'}\n")
+    print(
+        "  Azure OpenAI: "
+        f"{'configured' if Config.AZURE_OPENAI_API_KEY else 'not configured'}"
+        f"{f' ({Config.AZURE_OPENAI_DEPLOYMENT})' if Config.AZURE_OPENAI_DEPLOYMENT else ''}\n"
+    )
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)

@@ -1,6 +1,6 @@
 /**
  * GWSA GeoAnalytics — ChatDrawer
- * Slide-up Gemini AI chat panel.
+ * Slide-up AI chat panel.
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Sparkles, Minimize2, Maximize2 } from 'lucide-react';
@@ -53,7 +53,7 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
       } else if (typeof err.response?.data?.reply === 'string' && err.response.data.reply.trim()) {
         errorMsg = err.response.data.reply;
       } else if (err.response?.status === 429) {
-        errorMsg = err.response?.data?.error || 'Gemini quota or rate limit reached. Please wait and try again later.';
+        errorMsg = err.response?.data?.error || 'AI quota or rate limit reached. Please wait and try again later.';
       } else if (typeof err.response?.data?.error === 'string' && err.response.data.error.trim()) {
         errorMsg = err.response.data.error;
       }

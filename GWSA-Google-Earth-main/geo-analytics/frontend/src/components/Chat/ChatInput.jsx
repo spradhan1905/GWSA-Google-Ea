@@ -47,7 +47,7 @@ export default function ChatInput({ onSend, disabled }) {
         </button>
       </div>
       <p className="text-[10px] text-gwsa-text-muted mt-1.5 text-center">
-        Powered by Gemini AI · Responses may not be 100% accurate
+        Powered by Azure OpenAI · Responses may not be 100% accurate
       </p>
     </div>
   );

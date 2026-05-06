@@ -38,9 +38,21 @@ def _azure_openai_configured() -> bool:
 def _get_azure_openai_client():
     try:
         from openai import AzureOpenAI
+        from urllib.parse import urlparse
+
+        parsed_endpoint = urlparse(Config.AZURE_OPENAI_ENDPOINT)
+        if parsed_endpoint.scheme and parsed_endpoint.netloc:
+            host = parsed_endpoint.netloc.replace(
+                ".cognitiveservices.azure.com",
+                ".openai.azure.com",
+            )
+            azure_endpoint = f"{parsed_endpoint.scheme}://{host}"
+        else:
+            azure_endpoint = Config.AZURE_OPENAI_ENDPOINT
+
         return AzureOpenAI(
             api_key=Config.AZURE_OPENAI_API_KEY,
-            azure_endpoint=Config.AZURE_OPENAI_ENDPOINT,
+            azure_endpoint=azure_endpoint,
             api_version=Config.AZURE_OPENAI_API_VERSION,
         )
     except Exception:
