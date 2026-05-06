@@ -113,7 +113,16 @@ export default function StoreList({
                     className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                     style={{ backgroundColor: `${cfg.color}20`, color: cfg.color }}
                   >
-                    <TypeIcon className="w-5 h-5" strokeWidth={1.75} aria-hidden />
+                    {cfg.marker ? (
+                      <img
+                        src={cfg.marker.url}
+                        alt=""
+                        className="w-7 h-7 object-contain"
+                        aria-hidden
+                      />
+                    ) : (
+                      <TypeIcon className="w-5 h-5" strokeWidth={1.75} aria-hidden />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gwsa-text truncate">{loc.name}</p>

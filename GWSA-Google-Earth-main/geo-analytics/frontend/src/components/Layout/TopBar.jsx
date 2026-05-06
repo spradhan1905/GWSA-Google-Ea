@@ -3,8 +3,10 @@
  * App header with logo, store search, and AI chat toggle.
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, MessageSquare, X, MapPin, Sparkles, ArrowLeft, Globe } from 'lucide-react';
+import { Search, X, MapPin, Sparkles, ArrowLeft } from 'lucide-react';
 import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
+
+const GWSA_LOGO_URL = '/assets/goodwill-san-antonio-logo.png';
 
 export default function TopBar({
   locations = [],
@@ -53,8 +55,13 @@ export default function TopBar({
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
         )}
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gwsa-accent to-blue-400 flex items-center justify-center shadow-glow text-white">
-          <Globe className="w-4 h-4" aria-hidden />
+        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-glow overflow-hidden">
+          <img
+            src={GWSA_LOGO_URL}
+            alt=""
+            className="w-full h-full object-contain"
+            aria-hidden
+          />
         </div>
         <div className="hidden sm:block">
           <h1 className="text-sm font-bold text-gwsa-text leading-tight tracking-tight">
@@ -106,7 +113,16 @@ export default function TopBar({
                 >
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                     style={{ backgroundColor: `${cfg.color}20`, color: cfg.color }}>
-                    <TypeIcon className="w-4 h-4" strokeWidth={1.75} aria-hidden />
+                    {cfg.marker ? (
+                      <img
+                        src={cfg.marker.url}
+                        alt=""
+                        className="w-5 h-5 object-contain"
+                        aria-hidden
+                      />
+                    ) : (
+                      <TypeIcon className="w-4 h-4" strokeWidth={1.75} aria-hidden />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gwsa-text truncate">{loc.name}</p>

@@ -61,9 +61,9 @@ export const STORE_LOCATIONS = [
 
 /** Lucide icon component per location type (outline SVG). */
 export const LOCATION_TYPE_CONFIG = {
-  store:   { label: 'Retail Store', color: '#3B82F6', Icon: Store },
-  adc:     { label: 'Donation Center', color: '#10B981', Icon: Package },
-  outlet:  { label: 'Outlet', color: '#F59E0B', Icon: Tag },
+  store:   { label: 'Retail Store', color: '#3B82F6', Icon: Store, marker: { url: '/assets/marker-store.png', width: 52, height: 50 } },
+  adc:     { label: 'Donation Station', color: '#10B981', Icon: Package, marker: { url: '/assets/marker-donation.png', width: 44, height: 50 } },
+  outlet:  { label: 'Outlet', color: '#F59E0B', Icon: Tag, marker: { url: '/assets/marker-outlet.png', width: 46, height: 50 } },
   consolidated: { label: 'Consolidated', color: '#6366F1', Icon: Building2 },
   dropbox: { label: 'Drop Box', color: '#8B5CF6', Icon: Inbox },
 };

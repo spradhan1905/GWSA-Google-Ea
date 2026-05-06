@@ -44,6 +44,29 @@ function createMarkerSVG(type, isSelected) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
+function getMarkerIcon(type, isSelected) {
+  const cfg = LOCATION_TYPE_CONFIG[type] || LOCATION_TYPE_FALLBACK;
+  const marker = cfg.marker;
+
+  if (marker) {
+    const scale = isSelected ? 1.18 : 1;
+    const width = Math.round(marker.width * scale);
+    const height = Math.round(marker.height * scale);
+
+    return {
+      url: marker.url,
+      scaledSize: new window.google.maps.Size(width, height),
+      anchor: new window.google.maps.Point(width / 2, height),
+    };
+  }
+
+  return {
+    url: createMarkerSVG(type, isSelected),
+    scaledSize: new window.google.maps.Size(isSelected ? 44 : 36, isSelected ? 52 : 44),
+    anchor: new window.google.maps.Point(isSelected ? 22 : 18, isSelected ? 52 : 44),
+  };
+}
+
 export default function MapContainer({ locations = [], selectedLocation, onPinClick }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -184,11 +207,7 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
           position,
           map,
           title: loc.name,
-          icon: {
-            url: createMarkerSVG(loc.type, isSelected),
-            scaledSize: new window.google.maps.Size(isSelected ? 44 : 36, isSelected ? 52 : 44),
-            anchor: new window.google.maps.Point(isSelected ? 22 : 18, isSelected ? 52 : 44),
-          },
+          icon: getMarkerIcon(loc.type, isSelected),
           zIndex: isSelected ? 1000 : 1,
           animation: isSelected ? window.google.maps.Animation.BOUNCE : null,
         });
