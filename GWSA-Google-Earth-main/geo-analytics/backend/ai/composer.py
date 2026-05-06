@@ -73,8 +73,8 @@ def build_response_prompt(
         blocks.append(f"Retrieved evidence:\n{json.dumps(data, indent=2)}\n")
         if data.get("grain") == "day" and data.get("periods") == []:
             blocks.append(
-                "The periods list is empty: no daily aggregate rows were returned for this metric, "
-                "scope, and date range. Say so clearly; do not substitute location-level monthly totals.\n",
+                "Note: the retrieved periods list is empty (no daily rows for this metric and range). "
+                "Explain that conversationally—do not pass off monthly location totals as a daily answer.\n",
             )
     elif data_action and not data:
         blocks.append("Retrieved evidence:\n(null)\n")
