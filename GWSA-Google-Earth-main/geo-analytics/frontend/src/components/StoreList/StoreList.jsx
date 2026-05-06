@@ -36,9 +36,13 @@ export default function StoreList({
   const cfgAll = LOCATION_TYPE_CONFIG;
 
   return (
-    <div className="h-full flex flex-col bg-gwsa-surface/95 backdrop-blur-sm border-r border-gwsa-border w-full sm:w-[360px] shrink-0 overflow-hidden">
+    <div className="h-full flex flex-col bg-gwsa-surface/95 backdrop-blur-xl border border-gwsa-border sm:border-y-0 sm:border-l-0 sm:border-r w-full sm:w-[360px] shrink-0 overflow-hidden rounded-2xl sm:rounded-none shadow-panel sm:shadow-none transition-all duration-300 ease-out">
+      <div className="sm:hidden flex justify-center pt-2 pb-1">
+        <span className="h-1 w-10 rounded-full bg-gwsa-border-light" aria-hidden />
+      </div>
+
       {/* Header: location context + count + collapse */}
-      <div className="shrink-0 px-4 pt-4 pb-3 border-b border-gwsa-border flex items-center justify-between gap-2">
+      <div className="shrink-0 px-4 pt-3 sm:pt-4 pb-3 border-b border-gwsa-border flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-medium text-gwsa-text-muted uppercase tracking-wider">
             San Antonio & South Texas
@@ -51,7 +55,7 @@ export default function StoreList({
           <button
             type="button"
             onClick={onCollapse}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gwsa-bg-alt border border-gwsa-border text-gwsa-text-secondary hover:text-gwsa-text hover:border-gwsa-border-light"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gwsa-bg-alt border border-gwsa-border text-gwsa-text-secondary transition-all duration-200 hover:text-gwsa-text hover:border-gwsa-border-light active:scale-95"
           >
             <PanelLeftClose className="w-3.5 h-3.5" />
             Hide
@@ -67,7 +71,7 @@ export default function StoreList({
             <button
               key={f.id}
               onClick={() => onTypeFilterChange(f.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 active:scale-95 ${
                 typeFilter === f.id
                   ? 'bg-gwsa-accent text-white shadow-glow'
                   : 'bg-gwsa-bg-alt border border-gwsa-border text-gwsa-text-secondary hover:text-gwsa-text hover:border-gwsa-border-light'
@@ -93,7 +97,7 @@ export default function StoreList({
                   tabIndex={0}
                   onClick={() => onSelectLocation(loc)}
                   onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(loc)}
-                  className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-all duration-200 ${
+                  className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-all duration-200 active:scale-[0.99] ${
                     isSelected
                       ? 'bg-gwsa-accent/15 border-l-4 border-gwsa-accent -ml-px pl-[calc(1rem-1px)]'
                       : 'hover:bg-gwsa-surface-hover'

@@ -15,6 +15,11 @@ const MAP_ZOOM = 12;
 // Use Google's default satellite styling for a clean, modern look.
 // Leaving this array empty means we don't override Google's visual design.
 const MAP_STYLES = [];
+const MOBILE_MAP_QUERY = '(max-width: 639px)';
+
+function getIsMobileMap() {
+  return typeof window !== 'undefined' && window.matchMedia(MOBILE_MAP_QUERY).matches;
+}
 
 function createMarkerSVG(type, isSelected) {
   const cfg = LOCATION_TYPE_CONFIG[type] || LOCATION_TYPE_FALLBACK;
@@ -55,20 +60,21 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
   // Initialize Google Map
   useEffect(() => {
     if (!window.google?.maps || mapInstanceRef.current) return;
+    const isMobileMap = getIsMobileMap();
 
     const map = new window.google.maps.Map(mapRef.current, {
       center: MAP_CENTER,
-      zoom: MAP_ZOOM,
+      zoom: isMobileMap ? 11 : MAP_ZOOM,
       mapTypeId: 'hybrid',
       tilt: 0,
-      mapTypeControl: true,
+      mapTypeControl: !isMobileMap,
       mapTypeControlOptions: {
         style: window.google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
         position: window.google.maps.ControlPosition.TOP_LEFT,
         mapTypeIds: ['hybrid', 'satellite', 'roadmap'],
       },
       streetViewControl: false,
-      fullscreenControl: true,
+      fullscreenControl: !isMobileMap,
       fullscreenControlOptions: { position: window.google.maps.ControlPosition.RIGHT_TOP },
       zoomControl: true,
       zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER },
@@ -87,15 +93,17 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
     if (mapInstanceRef.current) return;
     const interval = setInterval(() => {
       if (window.google?.maps && !mapInstanceRef.current) {
+        const isMobileMap = getIsMobileMap();
         const map = new window.google.maps.Map(mapRef.current, {
           center: MAP_CENTER,
-          zoom: MAP_ZOOM,
+          zoom: isMobileMap ? 11 : MAP_ZOOM,
           mapTypeId: 'hybrid',
           tilt: 0,
           streetViewControl: false,
-          fullscreenControl: true,
+          fullscreenControl: !isMobileMap,
           zoomControl: true,
           rotateControl: true,
+          mapTypeControl: !isMobileMap,
           styles: MAP_STYLES,
           gestureHandling: 'greedy',
         });
@@ -286,11 +294,11 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
     <div className="absolute inset-0">
       <div ref={mapRef} className="w-full h-full" />
       {mapReady && (
-        <div className="absolute top-3 right-3 flex flex-col gap-2 z-20">
+        <div className="absolute top-3 right-3 flex flex-col gap-2 z-20 animate-fade-in">
           <button
             type="button"
             onClick={handleResetView}
-            className="bg-gwsa-surface/95 border border-gwsa-border rounded-lg p-2 shadow-panel hover:bg-gwsa-surface-hover transition-colors"
+            className="bg-gwsa-surface/95 backdrop-blur border border-gwsa-border rounded-lg p-2 shadow-panel transition-all duration-200 hover:bg-gwsa-surface-hover hover:-translate-y-0.5 active:scale-95"
             title="Reset view"
           >
             <RotateCcw className="w-4 h-4 text-gwsa-text" />
@@ -298,7 +306,7 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
           <button
             type="button"
             onClick={handleToggle3D}
-            className={`bg-gwsa-surface/95 border rounded-lg p-2 shadow-panel transition-colors ${
+            className={`bg-gwsa-surface/95 backdrop-blur border rounded-lg p-2 shadow-panel transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
               is3D
                 ? 'border-gwsa-accent bg-gwsa-accent/10'
                 : 'border-gwsa-border hover:bg-gwsa-surface-hover'
@@ -310,7 +318,7 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
           <button
             type="button"
             onClick={() => setActiveTool(activeTool === 'measure' ? 'none' : 'measure')}
-            className={`bg-gwsa-surface/95 border rounded-lg p-2 shadow-panel transition-colors ${
+            className={`bg-gwsa-surface/95 backdrop-blur border rounded-lg p-2 shadow-panel transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
               activeTool === 'measure'
                 ? 'border-gwsa-accent bg-gwsa-accent/10'
                 : 'border-gwsa-border hover:bg-gwsa-surface-hover'
