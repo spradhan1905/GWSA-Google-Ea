@@ -5,7 +5,3 @@
 !.env.example
 node_modules/
 dist/
-public/assets/goodwill-san-antonio-logo.png
-public/assets/marker-donation.png
-public/assets/marker-outlet.png
-public/assets/marker-store.png
