@@ -6,9 +6,10 @@ Table/view names come from Config (env) and are validated before use in SQL text
 from db.connection import get_connection
 from config import Config
 from datetime import date, datetime, timedelta
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 import decimal
 import json
+import math
 import re
 
 CONSOLIDATED_LOCATION_ID = "CONSOLIDATED"
@@ -866,18 +867,22 @@ def compare_locations(metric: str, store_refs: list, today: Optional[date] = Non
         if not timeframe:
             start = _month_start(current_day).isoformat()
             end = current_day.isoformat()
-        use_current_month_source = _is_current_month_timeframe(start, end, current_day)
+        mkey = metric if metric in {
+            "revenue", "net_income", "operating_expenses", "personnel_expenses", "expense_ratio",
+        } else "revenue"
         for loc in resolved:
-            rows = get_financials(
-                str(loc["LocationID"]),
-                start,
-                end,
-                this_month=use_current_month_source,
-            )
+            lid = str(loc["LocationID"])
+            val = _location_metric_total(lid, mkey, start, end, current_day)
+            if mkey == "expense_ratio":
+                mv = round(val, 4)
+            elif mkey == "door_count":
+                mv = int(round(val))
+            else:
+                mv = round(val, 2)
             comparisons.append({
-                "location_id": str(loc["LocationID"]),
+                "location_id": lid,
                 "location_name": loc.get("LocationName"),
-                "metric_value": _sum_field(rows, "NetRevenue"),
+                "metric_value": mv,
             })
         timeframe = {"start": start, "end": end}
 
@@ -920,18 +925,20 @@ def rank_locations(metric: str, limit: int = 5, today: Optional[date] = None, ti
         if not timeframe:
             start = _month_start(current_day).isoformat()
             end = current_day.isoformat()
-        use_current_month_source = _is_current_month_timeframe(start, end, current_day)
+        mkey = metric if metric in {
+            "revenue", "net_income", "operating_expenses", "personnel_expenses", "expense_ratio",
+        } else "revenue"
         for loc in locations:
-            financials = get_financials(
-                str(loc["LocationID"]),
-                start,
-                end,
-                this_month=use_current_month_source,
-            )
+            lid = str(loc["LocationID"])
+            val = _location_metric_total(lid, mkey, start, end, current_day)
+            if mkey == "expense_ratio":
+                mv = round(val, 4)
+            else:
+                mv = round(val, 2)
             rows.append({
-                "location_id": str(loc["LocationID"]),
+                "location_id": lid,
                 "location_name": loc.get("LocationName"),
-                "metric_value": _sum_field(financials, "NetRevenue"),
+                "metric_value": mv,
             })
 
     ranked = sorted(rows, key=lambda item: item["metric_value"], reverse=True)[:max(1, min(limit, 10))]
@@ -939,4 +946,644 @@ def rank_locations(metric: str, limit: int = 5, today: Optional[date] = None, ti
         "metric": metric,
         "timeframe": timeframe or {"start": start, "end": end},
         "locations": ranked,
+    }
+
+
+def _retail_scope_filter(scope: str) -> Tuple[Optional[frozenset], str]:
+    """Return (allowed lowercased LocationType set, scope label) or (None for all non-consolidated)."""
+    sl = (scope or "all_retail_stores").strip().lower()
+    if sl in {"all_retail_stores", "retail"}:
+        return frozenset({"store", "outlet"}), "all_retail_stores"
+    if sl in {"all_locations", "locations"}:
+        return None, "all_locations"
+    return frozenset({"store", "outlet"}), "all_retail_stores"
+
+
+def rank_revenue_days(
+    start_date: str,
+    end_date: str,
+    *,
+    scope: str = "all_retail_stores",
+    limit: int = 5,
+    timeframe_label: Optional[str] = None,
+) -> dict:
+    """
+    Sum daily revenue across locations from TotalCoreTableFinal via per-store approved daily queries.
+    Used for \"which day had the highest sales\" across retail stores.
+    """
+    allowed_types, scope_key = _retail_scope_filter(scope)
+    locations = get_locations()
+    by_day = {}
+    for loc in locations:
+        lid = str(loc.get("LocationID", "") or "").strip()
+        if _is_consolidated_location(lid):
+            continue
+        lt = str(loc.get("LocationType") or "").strip().lower()
+        if allowed_types is not None and lt not in allowed_types:
+            continue
+        rows = get_financials(lid, start_date, end_date, this_month=True)
+        for row in rows:
+            sd = row.get("SalesDate")
+            if sd is None:
+                continue
+            sd_key = sd.isoformat() if hasattr(sd, "isoformat") else str(sd)[:10]
+            val = row.get("NetRevenue")
+            fv = float(_coerce_number(val)) if val is not None else 0.0
+            by_day[sd_key] = by_day.get(sd_key, 0.0) + fv
+
+    cap = max(1, min(int(limit), 31))
+    periods = sorted(
+        [{"date": d, "metric_value": round(v, 2)} for d, v in by_day.items()],
+        key=lambda x: x["metric_value"],
+        reverse=True,
+    )[:cap]
+
+    obj_name = _validated_this_month_revenue_object()
+    cat = (Config.SQL_SALES_CORE_CATEGORY or "").strip()
+    filter_notes: List[str] = ["retail locations: store + outlet"] if scope_key == "all_retail_stores" else []
+    if cat:
+        filter_notes.append(f"Category/RevenueType = {cat}")
+
+    tf = {"start": start_date, "end": end_date}
+    if timeframe_label:
+        tf["label"] = timeframe_label
+
+    return {
+        "metric": "revenue",
+        "grain": "day",
+        "scope": scope_key,
+        "timeframe": tf,
+        "periods": periods,
+        "source": {
+            "name": obj_name,
+            "grain": "daily",
+            "metric": "NetRevenue (Core)",
+            "date_range": f"{start_date} to {end_date}",
+            "filters": filter_notes,
+        },
+    }
+
+
+def rank_door_count_days(
+    start_date: str,
+    end_date: str,
+    *,
+    scope: str = "all_retail_stores",
+    limit: int = 5,
+    timeframe_label: Optional[str] = None,
+) -> dict:
+    """Rank calendar days by total door count summed across scoped locations."""
+    allowed_types, scope_key = _retail_scope_filter(scope)
+    locations = get_locations()
+    tbl = _validated_door_count_object()
+    by_day = {}
+    for loc in locations:
+        lid = str(loc.get("LocationID", "") or "").strip()
+        if _is_consolidated_location(lid):
+            continue
+        lt = str(loc.get("LocationType") or "").strip().lower()
+        if allowed_types is not None and lt not in allowed_types:
+            continue
+        rows = get_door_count(lid, start_date, end_date)
+        for row in rows:
+            cd = row.get("CountDate")
+            if cd is None:
+                continue
+            dk = cd.isoformat() if hasattr(cd, "isoformat") else str(cd)[:10]
+            by_day[dk] = by_day.get(dk, 0.0) + float(_coerce_number(row.get("DonorVisits")))
+
+    cap = max(1, min(int(limit), 31))
+    periods = sorted(
+        [{"date": d, "metric_value": int(round(v))} for d, v in by_day.items()],
+        key=lambda x: x["metric_value"],
+        reverse=True,
+    )[:cap]
+
+    tf = {"start": start_date, "end": end_date}
+    if timeframe_label:
+        tf["label"] = timeframe_label
+
+    return {
+        "metric": "door_count",
+        "grain": "day",
+        "scope": scope_key,
+        "timeframe": tf,
+        "periods": periods,
+        "source": {
+            "name": tbl,
+            "grain": "daily",
+            "metric": f"SUM({Config.SQL_DOOR_COUNT_COL_VISITS})",
+            "date_range": f"{start_date} to {end_date}",
+            "filters": (
+                ["retail locations: store + outlet"] if scope_key == "all_retail_stores" else []
+            ),
+        },
+    }
+
+
+def _iterate_scoped_locations(scope: str) -> List[dict]:
+    allowed_types, _ = _retail_scope_filter(scope)
+    out = []
+    for loc in get_locations():
+        lid = str(loc.get("LocationID", "") or "").strip()
+        if _is_consolidated_location(lid):
+            continue
+        lt = str(loc.get("LocationType") or "").strip().lower()
+        if allowed_types is not None and lt not in allowed_types:
+            continue
+        out.append(loc)
+    return out
+
+
+def _location_metric_total(
+    location_id: str,
+    metric: str,
+    start: str,
+    end: str,
+    current_day: date,
+) -> float:
+    """Single-location aggregate for ranking / breakdowns."""
+    if metric == "door_count":
+        return float(int(round(_sum_field(get_door_count(location_id, start, end), "DonorVisits"))))
+    if metric in {"net_income", "operating_expenses", "personnel_expenses"}:
+        rows = get_financials(location_id, start, end, this_month=False)
+        field = {
+            "net_income": "NetIncome",
+            "operating_expenses": "OperatingExpenses",
+            "personnel_expenses": "TotalPersonnelExpenses",
+        }[metric]
+        return _sum_field(rows, field)
+    if metric == "expense_ratio":
+        rows = get_financials(location_id, start, end, this_month=False)
+        vals = [
+            _coerce_number(r.get("ExpenseRatio"))
+            for r in rows
+            if r.get("ExpenseRatio") is not None
+        ]
+        return sum(vals) / len(vals) if vals else 0.0
+    use_current_month_source = _is_current_month_timeframe(start, end, current_day)
+    rows = get_financials(location_id, start, end, this_month=use_current_month_source)
+    return _sum_field(rows, "NetRevenue")
+
+
+def rank_store_revenue(
+    start_date: str,
+    end_date: str,
+    *,
+    metric: str = "revenue",
+    scope: str = "all_retail_stores",
+    limit: int = 10,
+    timeframe_label: Optional[str] = None,
+    today: Optional[date] = None,
+) -> dict:
+    """
+    Rank stores/outlets in scope by an approved metric (spec: store breakdown for a day or month).
+    """
+    current_day = today or date.today()
+    _, scope_key = _retail_scope_filter(scope)
+    cap = max(1, min(int(limit), 25))
+    rank_metric = metric if metric != "revenue" else "revenue"
+    if rank_metric == "revenue":
+        fn_metric = "revenue"
+    elif rank_metric not in {
+        "door_count", "net_income", "operating_expenses", "personnel_expenses", "expense_ratio",
+    }:
+        fn_metric = "revenue"
+    else:
+        fn_metric = rank_metric
+
+    rows = []
+    for loc in _iterate_scoped_locations(scope):
+        lid = str(loc["LocationID"])
+        val = _location_metric_total(lid, fn_metric, start_date, end_date, current_day)
+        mv = round(val, 4) if fn_metric == "expense_ratio" else round(val, 2)
+        if fn_metric == "door_count":
+            mv = int(round(val))
+        rows.append({
+            "location_id": lid,
+            "location_name": loc.get("LocationName"),
+            "metric_value": mv,
+        })
+
+    ranked = sorted(rows, key=lambda item: item["metric_value"], reverse=True)[:cap]
+    tf = {"start": start_date, "end": end_date}
+    if timeframe_label:
+        tf["label"] = timeframe_label
+
+    rev_obj = _validated_this_month_revenue_object()
+    month_obj = _validated_retail_monthly_financial_object()
+    if fn_metric == "revenue" and _is_current_month_timeframe(start_date, end_date, current_day):
+        primary_src = rev_obj
+    elif fn_metric == "door_count":
+        primary_src = _validated_door_count_object()
+    else:
+        primary_src = month_obj
+    src = {
+        "name": primary_src,
+        "grain": "location_total_for_range",
+        "metric": fn_metric,
+        "date_range": f"{start_date} to {end_date}",
+        "filters": (
+            ["retail locations: store + outlet"] if scope_key == "all_retail_stores" else []
+        ),
+    }
+
+    return {
+        "metric": fn_metric,
+        "grain": "location",
+        "scope": scope_key,
+        "timeframe": tf,
+        "locations": ranked,
+        "source": src,
+    }
+
+
+def get_revenue_door_count_series(
+    store_id: str,
+    start_date: str,
+    end_date: str,
+    *,
+    grain: str = "day",
+    today: Optional[date] = None,
+) -> dict:
+    """Aligned revenue + door count series for one store (daily or monthly buckets)."""
+    current_day = today or date.today()
+    store_id = str(store_id).strip()
+    loc = resolve_location_reference(store_id)
+    if not loc:
+        return {"error": "unknown_store", "series": [], "grain": grain}
+
+    lid = str(loc["LocationID"])
+    use_daily_revenue = _is_current_month_timeframe(start_date, end_date, current_day)
+    fin = get_financials(lid, start_date, end_date, this_month=use_daily_revenue)
+    doors = get_door_count(lid, start_date, end_date)
+
+    if (grain or "day").lower() == "month":
+        buckets = {}
+        for row in fin:
+            sd = row.get("SalesDate") or row.get("PeriodMonth")
+            if sd is None:
+                continue
+            dk = sd.isoformat()[:7] if hasattr(sd, "isoformat") else str(sd)[:7]
+            buckets.setdefault(dk, {"revenue": 0.0, "doors": 0.0})
+            buckets[dk]["revenue"] += _coerce_number(row.get("NetRevenue"))
+        for row in doors:
+            cd = row.get("CountDate")
+            if cd is None:
+                continue
+            dk = cd.isoformat()[:7] if hasattr(cd, "isoformat") else str(cd)[:7]
+            buckets.setdefault(dk, {"revenue": 0.0, "doors": 0.0})
+            buckets[dk]["doors"] += _coerce_number(row.get("DonorVisits"))
+        series_keys = sorted(buckets.keys())
+        series = []
+        for k in series_keys:
+            r = buckets[k]["revenue"]
+            d = buckets[k]["doors"]
+            series.append({
+                "period": k,
+                "revenue": round(r, 2),
+                "door_count": int(round(d)),
+                "revenue_per_visit": round(r / d, 4) if d > 0 else None,
+            })
+        g = "month"
+    else:
+        by_day = {}
+        for row in fin:
+            sd = row.get("SalesDate")
+            if sd is None:
+                continue
+            dk = sd.isoformat()[:10] if hasattr(sd, "isoformat") else str(sd)[:10]
+            by_day.setdefault(dk, {"revenue": 0.0, "doors": 0.0})
+            by_day[dk]["revenue"] += _coerce_number(row.get("NetRevenue"))
+        for row in doors:
+            cd = row.get("CountDate")
+            if cd is None:
+                continue
+            dk = cd.isoformat()[:10] if hasattr(cd, "isoformat") else str(cd)[:10]
+            by_day.setdefault(dk, {"revenue": 0.0, "doors": 0.0})
+            by_day[dk]["doors"] += _coerce_number(row.get("DonorVisits"))
+        series_keys = sorted(by_day.keys())
+        series = []
+        for k in series_keys:
+            r = by_day[k]["revenue"]
+            d = by_day[k]["doors"]
+            series.append({
+                "date": k,
+                "revenue": round(r, 2),
+                "door_count": int(round(d)),
+                "revenue_per_visit": round(r / d, 4) if d > 0 else None,
+            })
+        g = "day"
+
+    return {
+        "location_id": lid,
+        "location_name": loc.get("LocationName"),
+        "grain": g,
+        "timeframe": {"start": start_date, "end": end_date},
+        "series": series,
+        "source": {
+            "revenue_table": _validated_this_month_revenue_object() if use_daily_revenue else _validated_retail_monthly_financial_object(),
+            "door_table": _validated_door_count_object(),
+            "note": "Revenue grain follows current-month TotalCore vs monthly summary rules.",
+        },
+    }
+
+
+def network_correlation_revenue_door(
+    start_date: str,
+    end_date: str,
+    *,
+    scope: str = "all_retail_stores",
+    timeframe_label: Optional[str] = None,
+) -> dict:
+    """Daily summed revenue vs summed door counts across scoped locations; Pearson r on overlapping days."""
+    by_rev = {}
+    for loc in _iterate_scoped_locations(scope):
+        lid = str(loc["LocationID"])
+        rows = get_financials(lid, start_date, end_date, this_month=True)
+        for row in rows:
+            sd = row.get("SalesDate")
+            if sd is None:
+                continue
+            dk = sd.isoformat()[:10] if hasattr(sd, "isoformat") else str(sd)[:10]
+            by_rev[dk] = by_rev.get(dk, 0.0) + _coerce_number(row.get("NetRevenue"))
+
+    by_door = {}
+    for loc in _iterate_scoped_locations(scope):
+        lid = str(loc["LocationID"])
+        rows = get_door_count(lid, start_date, end_date)
+        for row in rows:
+            cd = row.get("CountDate")
+            if cd is None:
+                continue
+            dk = cd.isoformat()[:10] if hasattr(cd, "isoformat") else str(cd)[:10]
+            by_door[dk] = by_door.get(dk, 0.0) + _coerce_number(row.get("DonorVisits"))
+
+    days = sorted(set(by_rev.keys()) & set(by_door.keys()))
+    xs = [by_rev[d] for d in days]
+    ys = [by_door[d] for d in days]
+    n = len(xs)
+    pearson_r = None
+    if n >= 3:
+        mx = sum(xs) / n
+        my = sum(ys) / n
+        vx = sum((x - mx) ** 2 for x in xs)
+        vy = sum((y - my) ** 2 for y in ys)
+        if vx > 1e-9 and vy > 1e-9:
+            pearson_r = sum((xs[i] - mx) * (ys[i] - my) for i in range(n)) / math.sqrt(vx * vy)
+
+    _, scope_key = _retail_scope_filter(scope)
+    tf = {"start": start_date, "end": end_date}
+    if timeframe_label:
+        tf["label"] = timeframe_label
+
+    return {
+        "intent": "correlation_check",
+        "metric_pair": ["network_revenue", "network_door_count"],
+        "grain": "day",
+        "scope": scope_key,
+        "timeframe": tf,
+        "overlap_days": n,
+        "pearson_r": None if pearson_r is None else round(float(pearson_r), 4),
+        "series": [{"date": d, "network_revenue": round(by_rev[d], 2), "network_door_count": int(round(by_door[d]))} for d in days],
+        "source": {
+            "revenue": _validated_this_month_revenue_object(),
+            "door_count": _validated_door_count_object(),
+            "filters": ["summed across scoped locations"],
+        },
+    }
+
+
+def aggregate_network_metric(
+    metric: str,
+    start_date: str,
+    end_date: str,
+    *,
+    scope: str = "all_retail_stores",
+    today: Optional[date] = None,
+) -> float:
+    """Total metric across scoped locations for one date range."""
+    current_day = today or date.today()
+    total = 0.0
+    for loc in _iterate_scoped_locations(scope):
+        lid = str(loc["LocationID"])
+        total += _location_metric_total(lid, metric, start_date, end_date, current_day)
+    return total
+
+
+def aggregate_network_expense_ratio(
+    start_date: str,
+    end_date: str,
+    *,
+    scope: str = "all_retail_stores",
+    today: Optional[date] = None,
+) -> float:
+    """Network-wide (operating+personnel) / revenue from monthly financial rows."""
+    total_rev = 0.0
+    total_opex = 0.0
+    for loc in _iterate_scoped_locations(scope):
+        lid = str(loc["LocationID"])
+        rows = get_financials(lid, start_date, end_date, this_month=False)
+        total_rev += _sum_field(rows, "NetRevenue")
+        total_opex += _sum_field(rows, "OperatingExpenses")
+    if total_rev <= 1e-9:
+        return 0.0
+    return total_opex / total_rev
+
+
+def compare_period_totals(
+    metric: str,
+    timeframe_a: dict,
+    timeframe_b: dict,
+    *,
+    scope: str = "all_retail_stores",
+    today: Optional[date] = None,
+) -> dict:
+    """Compare network-wide aggregates between two ranges (no LLM SQL)."""
+    current_day = today or date.today()
+    a_start, a_end = timeframe_a["start"], timeframe_a["end"]
+    b_start, b_end = timeframe_b["start"], timeframe_b["end"]
+
+    mapped = metric if metric != "revenue" else "revenue"
+    if mapped == "expense_ratio":
+        val_a = aggregate_network_expense_ratio(a_start, a_end, scope=scope, today=current_day)
+        val_b = aggregate_network_expense_ratio(b_start, b_end, scope=scope, today=current_day)
+    else:
+        val_a = aggregate_network_metric(mapped, a_start, a_end, scope=scope, today=current_day)
+        val_b = aggregate_network_metric(mapped, b_start, b_end, scope=scope, today=current_day)
+
+    pct = None
+    if val_b != 0:
+        pct = round(100.0 * (val_a - val_b) / abs(val_b), 2)
+
+    _, scope_key = _retail_scope_filter(scope)
+    return {
+        "intent": "compare_periods",
+        "metric": mapped,
+        "scope": scope_key,
+        "period_a": {"timeframe": timeframe_a, "value": round(val_a, 2) if mapped != "expense_ratio" else round(val_a, 4)},
+        "period_b": {"timeframe": timeframe_b, "value": round(val_b, 2) if mapped != "expense_ratio" else round(val_b, 4)},
+        "pct_change_vs_b": pct,
+        "source": {"note": "Network sum across scoped locations using approved queries."},
+    }
+
+
+def revenue_per_visit_by_store(
+    start_date: str,
+    end_date: str,
+    *,
+    scope: str = "all_retail_stores",
+    limit: int = 15,
+    today: Optional[date] = None,
+) -> dict:
+    """Derived ranking: TotalRevenue / TotalDonorVisits per location for range."""
+    current_day = today or date.today()
+    cap = max(1, min(int(limit), 25))
+    ranked_list = []
+    for loc in _iterate_scoped_locations(scope):
+        lid = str(loc["LocationID"])
+        rev = _location_metric_total(lid, "revenue", start_date, end_date, current_day)
+        doors = _location_metric_total(lid, "door_count", start_date, end_date, current_day)
+        rpv = rev / doors if doors > 0 else None
+        ranked_list.append({
+            "location_id": lid,
+            "location_name": loc.get("LocationName"),
+            "revenue": round(rev, 2),
+            "door_count": int(round(doors)),
+            "revenue_per_visit": None if rpv is None else round(rpv, 4),
+        })
+    filtered = [r for r in ranked_list if r["revenue_per_visit"] is not None]
+    filtered.sort(key=lambda x: x["revenue_per_visit"], reverse=True)
+    filtered = filtered[:cap]
+
+    _, scope_key = _retail_scope_filter(scope)
+    return {
+        "intent": "derived_metric",
+        "derived": "revenue_per_visit",
+        "scope": scope_key,
+        "timeframe": {"start": start_date, "end": end_date},
+        "locations": filtered,
+        "source": {"name": "TotalCore + PCounter rollup", "metric": "revenue per donor visit"},
+    }
+
+
+def trend_summary_for_chat(
+    store_id: str,
+    months: int = 12,
+) -> dict:
+    """Thin wrapper around get_trends for grounded chat payloads."""
+    rows = get_trends(store_id, max(1, min(int(months), 36)))
+    loc = resolve_location_reference(store_id)
+    return {
+        "intent": "trend_summary",
+        "granularity": "month",
+        "months_requested": months,
+        "location_id": str(store_id),
+        "location_name": loc.get("LocationName") if loc else None,
+        "rows": rows,
+        "source": {
+            "financial": _validated_retail_monthly_financial_object(),
+            "door": _validated_door_count_object(),
+            "grain": "month",
+            "note": "Completed calendar months ending last closed month.",
+        },
+    }
+
+
+def multi_metric_snapshot(
+    store_id: str,
+    start_date: str,
+    end_date: str,
+    *,
+    today: Optional[date] = None,
+) -> dict:
+    """Revenue-related monthly financials plus door totals for one store."""
+    loc = resolve_location_reference(store_id)
+    if not loc:
+        return {"error": "unknown_store"}
+
+    lid = str(loc["LocationID"])
+    mrows = get_financials(lid, start_date, end_date, this_month=False)
+    metrics = {
+        "net_revenue": round(_sum_field(mrows, "NetRevenue"), 2),
+        "net_income": round(_sum_field(mrows, "NetIncome"), 2),
+        "operating_expenses": round(_sum_field(mrows, "OperatingExpenses"), 2),
+        "personnel_expenses": round(_sum_field(mrows, "TotalPersonnelExpenses"), 2),
+        "expense_ratio_avg": round(
+            sum(_coerce_number(r.get("ExpenseRatio")) for r in mrows if r.get("ExpenseRatio") is not None)
+            / max(1, len([r for r in mrows if r.get("ExpenseRatio") is not None])),
+            4,
+        ) if mrows else None,
+        "door_count_total": int(round(_sum_field(get_door_count(lid, start_date, end_date), "DonorVisits"))),
+    }
+
+    return {
+        "intent": "multi_metric_summary",
+        "location_id": lid,
+        "location_name": loc.get("LocationName"),
+        "timeframe": {"start": start_date, "end": end_date},
+        "metrics": metrics,
+        "source": {
+            "monthly_financial": _validated_retail_monthly_financial_object(),
+            "door_daily": _validated_door_count_object(),
+        },
+    }
+
+
+def donor_map_summary(store_id: str, max_sample: int = 5) -> dict:
+    """Light donor geography summary for analytics chat (counts only; no dumping full KML here)."""
+    rows = get_donor_addresses(store_id)
+    loc = resolve_location_reference(store_id)
+    sample_states = []
+    for row in rows[:max_sample]:
+        st = row.get("State")
+        if st:
+            sample_states.append(str(st).strip())
+
+    cities = []
+    seen = set()
+    for row in rows[:50]:
+        c = row.get("City")
+        key = str(c).strip().lower() if c else ""
+        if key and key not in seen:
+            seen.add(key)
+            cities.append(str(c).strip())
+        if len(cities) >= 5:
+            break
+
+    return {
+        "intent": "map_context_summary",
+        "location_id": str(store_id),
+        "location_name": loc.get("LocationName") if loc else None,
+        "donor_pins_returned_by_query": len(rows),
+        "sample_states": sorted(set(sample_states)),
+        "sample_cities_preview": cities,
+        "source": {"table": "dbo.DonorAddresses", "grain": "point-level (aggregated counts only)"},
+    }
+
+
+def build_data_catalog() -> dict:
+    """Metadata-only capability list for assistants (no database reads)."""
+    return {
+        "intent": "data_catalog",
+        "version": "1",
+        "description": (
+            "GWSA GeoAnalytics chat uses approved parameterized queries only. "
+            "Intents exposed to planners include store summaries, rankings, trends, correlations, "
+            "period compares, breakdowns by store, derived revenue-per-visit, and donor map counts."
+        ),
+        "datasets": [
+            {"name": _validated_this_month_revenue_object(), "grain": "daily_core_revenue"},
+            {"name": _validated_retail_monthly_financial_object(), "grain": "monthly_financials"},
+            {"name": _validated_door_count_object(), "grain": "daily_door_visits"},
+            {"name": "dbo.DonorAddresses", "grain": "donor_latitude_longitude"},
+        ],
+        "metrics": [
+            "revenue (core sales)",
+            "door_count / donor visits",
+            "net income, operating expenses, personnel expenses, expense ratio (monthly summary)",
+            "revenue_per_visit derived",
+            "network correlation revenue vs visits (daily summed)",
+            "trends: multi-month revenue, net income, expense ratio with door counts",
+        ],
     }
