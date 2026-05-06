@@ -62,7 +62,15 @@ class Config:
     SQL_DOOR_COUNT_COL_VISITS = os.environ.get('SQL_DOOR_COUNT_COL_VISITS', 'In').strip()
     SQL_DOOR_COUNT_COL_LOCATION = os.environ.get('SQL_DOOR_COUNT_COL_LOCATION', 'LocationID').strip()
 
-    # Gemini AI
+    # Azure OpenAI
+    AZURE_OPENAI_ENDPOINT = os.environ.get('AZURE_OPENAI_ENDPOINT', '').strip()
+    AZURE_OPENAI_API_KEY = os.environ.get('AZURE_OPENAI_API_KEY', '')
+    AZURE_OPENAI_DEPLOYMENT = os.environ.get('AZURE_OPENAI_DEPLOYMENT', '').strip()
+    AZURE_OPENAI_API_VERSION = os.environ.get(
+        'AZURE_OPENAI_API_VERSION', '2024-10-21-preview'
+    ).strip()
+
+    # Gemini AI (legacy fallback for older local environments)
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
     GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash').strip()
 

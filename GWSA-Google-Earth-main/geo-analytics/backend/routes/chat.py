@@ -1,6 +1,6 @@
 """
-GWSA GeoAnalytics — Gemini AI Chat Route
-POST /api/chat — proxies to Google Gemini (key never in browser)
+GWSA GeoAnalytics — AI Chat Route
+POST /api/chat — proxies to Azure OpenAI (key never in browser)
 """
 import json
 import re
@@ -24,6 +24,27 @@ INTENT_METRICS = {"revenue", "door_count"}
 RANK_HINTS = ("highest", "best", "top", "most", "lowest", "least")
 COMPARE_HINTS = ("compare", "vs", "versus", "against")
 SUMMARY_HINTS = ("summary", "how is", "how's", "performance", "doing")
+
+
+def _azure_openai_configured() -> bool:
+    return all([
+        Config.AZURE_OPENAI_ENDPOINT,
+        Config.AZURE_OPENAI_API_KEY,
+        Config.AZURE_OPENAI_DEPLOYMENT,
+        Config.AZURE_OPENAI_API_VERSION,
+    ])
+
+
+def _get_azure_openai_client():
+    try:
+        from openai import AzureOpenAI
+        return AzureOpenAI(
+            api_key=Config.AZURE_OPENAI_API_KEY,
+            azure_endpoint=Config.AZURE_OPENAI_ENDPOINT,
+            api_version=Config.AZURE_OPENAI_API_VERSION,
+        )
+    except Exception:
+        return None
 
 
 def _get_gemini_model():
@@ -123,7 +144,7 @@ def _detect_metric(user_message: str) -> str:
 
 
 def _plan_request(user_message: str, store_context: str, history: list) -> dict:
-    """Choose an approved analytics action with local heuristics to avoid extra Gemini calls."""
+    """Choose an approved analytics action with local heuristics to avoid extra AI calls."""
     from db.queries import get_location_catalog
 
     catalog = get_location_catalog(limit=60)
@@ -154,10 +175,10 @@ def _plan_request(user_message: str, store_context: str, history: list) -> dict:
 
 
 def _quota_fallback_reply(user_message: str, data_action: str, analytics_data: dict) -> str:
-    """Return a plain fallback answer when Gemini is unavailable but approved analytics data exists."""
+    """Return a plain fallback answer when AI is unavailable but approved analytics data exists."""
     if not data_action or not analytics_data:
         return (
-            "Gemini is temporarily unavailable or has hit its quota limit. "
+            "The AI service is temporarily unavailable or has hit its quota limit. "
             "The data request completed, but I could not generate a full AI narrative right now."
         )
 
@@ -168,7 +189,7 @@ def _quota_fallback_reply(user_message: str, data_action: str, analytics_data: d
             leader = locations[0]
             value = leader.get("metric_value")
             return (
-                f"Gemini is temporarily unavailable, but based on the approved analytics query, "
+                f"The AI service is temporarily unavailable, but based on the approved analytics query, "
                 f"{leader.get('location_name')} is currently ranked highest for {metric} "
                 f"with a value of {value}."
             )
@@ -178,43 +199,43 @@ def _quota_fallback_reply(user_message: str, data_action: str, analytics_data: d
         metric = analytics_data.get("metric", "revenue")
         if leader:
             return (
-                f"Gemini is temporarily unavailable, but the comparison completed. "
+                f"The AI service is temporarily unavailable, but the comparison completed. "
                 f"{leader.get('location_name')} leads for {metric} with a value of {leader.get('metric_value')}."
             )
 
     if data_action == "location_summary":
         metrics = (analytics_data or {}).get("metrics") or {}
         return (
-            "Gemini is temporarily unavailable, but the store summary completed. "
+            "The AI service is temporarily unavailable, but the store summary completed. "
             f"This month revenue is {metrics.get('this_month_revenue', 0)}, "
             f"last 30 days door count is {metrics.get('last_30_days_door_count', 0)}, "
             f"and average daily door count is {metrics.get('avg_daily_door_count_30d', 0)}."
         )
 
     return (
-        "Gemini is temporarily unavailable or has hit its quota limit. "
+        "The AI service is temporarily unavailable or has hit its quota limit. "
         "The approved analytics request completed successfully."
     )
 
 
-def _gemini_error_response(exc: Exception, data_action: str, analytics_data: dict):
-    """Map Gemini exceptions to useful HTTP responses for the frontend."""
+def _ai_error_response(exc: Exception, data_action: str, analytics_data: dict):
+    """Map AI provider exceptions to useful HTTP responses for the frontend."""
     message = str(exc).strip() or "Unknown AI service error."
     lowered = message.lower()
 
     if any(token in lowered for token in ("429", "quota", "rate limit", "resource exhausted", "too many requests")):
         return jsonify(
-            error="Gemini quota or rate limit reached. Please wait or increase your Google AI Studio billing limits.",
+            error="Azure OpenAI quota or rate limit reached. Please wait or increase your Azure OpenAI quota.",
             reply=_quota_fallback_reply("", data_action, analytics_data),
             sql_used=data_action,
             data=analytics_data,
         ), 429
 
     if any(token in lowered for token in ("api key", "permission denied", "permission", "forbidden", "403", "401", "unauthorized")):
-        return jsonify(error=f"Gemini authentication or access error: {message}"), 502
+        return jsonify(error=f"Azure OpenAI authentication or access error: {message}"), 502
 
     if any(token in lowered for token in ("timeout", "timed out", "deadline exceeded", "connection", "unavailable", "503")):
-        return jsonify(error=f"Gemini network or availability error: {message}"), 504
+        return jsonify(error=f"Azure OpenAI network or availability error: {message}"), 504
 
     return jsonify(error=f"AI service error: {message}"), 500
 
@@ -259,14 +280,30 @@ def _execute_approved_action(plan: dict, store_context: str):
 
 
 def _build_response_prompt(user_message: str, store_context: str, data_action: str, data: dict) -> str:
-    prompt = SYSTEM_CONTEXT
+    prompt = ""
     if store_context:
-        prompt += f"\nCurrent viewed location: {store_context}."
+        prompt += f"Current viewed location: {store_context}.\n"
     if data_action and data:
-        prompt += f"\nApproved analytics action used: {data_action}."
-        prompt += f"\nStructured analytics data:\n{json.dumps(data, indent=2)}"
-    prompt += f"\n\nUser question: {user_message}"
+        prompt += f"Approved analytics action used: {data_action}.\n"
+        prompt += f"Structured analytics data:\n{json.dumps(data, indent=2)}\n\n"
+    prompt += f"User question: {user_message}"
     return prompt
+
+
+def _build_azure_messages(user_message: str, store_context: str, history: list, data_action: str, data: dict) -> list:
+    messages = [{"role": "system", "content": SYSTEM_CONTEXT.strip()}]
+    for item in history[-6:]:
+        role = item.get("role", "user")
+        if role not in {"user", "assistant"}:
+            role = "user"
+        content = str(item.get("content", "")).strip()
+        if content:
+            messages.append({"role": role, "content": content})
+    messages.append({
+        "role": "user",
+        "content": _build_response_prompt(user_message, store_context, data_action, data),
+    })
+    return messages
 
 
 @chat_bp.route('/api/chat', methods=['POST'])
@@ -285,8 +322,9 @@ def chat():
     store_context = data.get('store_context')
     history = data.get('conversation_history', [])
 
-    model = _get_gemini_model()
-    if not model or not Config.GEMINI_API_KEY:
+    azure_client = _get_azure_openai_client() if _azure_openai_configured() else None
+    gemini_model = None if azure_client else _get_gemini_model()
+    if not azure_client and (not gemini_model or not Config.GEMINI_API_KEY):
         return jsonify({
             'reply': _demo_reply(user_message, store_context),
             'sql_used': None,
@@ -298,23 +336,31 @@ def chat():
     full_prompt = _build_response_prompt(user_message, store_context, data_action, analytics_data)
 
     try:
-        response = model.generate_content(full_prompt)
+        if azure_client:
+            response = azure_client.chat.completions.create(
+                model=Config.AZURE_OPENAI_DEPLOYMENT,
+                messages=_build_azure_messages(user_message, store_context, history, data_action, analytics_data),
+            )
+            reply = response.choices[0].message.content or ""
+        else:
+            response = gemini_model.generate_content(f"{SYSTEM_CONTEXT}\n\n{full_prompt}")
+            reply = response.text
         return jsonify({
-            'reply': response.text,
+            'reply': reply,
             'sql_used': data_action,
             'data': analytics_data
         })
     except Exception as e:
-        return _gemini_error_response(e, data_action, analytics_data)
+        return _ai_error_response(e, data_action, analytics_data)
 
 
 def _demo_reply(message: str, store_context: str = None) -> str:
-    """Provide helpful demo responses when Gemini API key is not configured."""
+    """Provide helpful demo responses when no AI provider is configured."""
     msg = message.lower()
     store = store_context or "the selected location"
 
     if 'revenue' in msg or 'income' in msg:
-        return f"Based on demo data for {store}, this location shows average monthly net revenue of approximately $145,000 with a healthy expense ratio around 68%. To see live data, configure your Gemini API key and SQL Server connection."
+        return f"Based on demo data for {store}, this location shows average monthly net revenue of approximately $145,000 with a healthy expense ratio around 68%. To see live data, configure Azure OpenAI and SQL Server connection."
     elif 'door count' in msg or 'visitor' in msg:
         return f"Demo data shows {store} averages about 120 donor visits per day, with weekends seeing up to 250 visits. Peak hours are typically 10am-2pm on Saturdays."
     elif 'compare' in msg or 'best' in msg or 'worst' in msg:
@@ -322,4 +368,4 @@ def _demo_reply(message: str, store_context: str = None) -> str:
     elif 'manager' in msg:
         return "GWSA locations are supported by store managers and regional leaders, but this demo does not expose individual manager names."
     else:
-        return f"I'm the GWSA GeoAnalytics AI assistant running in demo mode. I can help analyze store performance, door counts, revenue trends, and compare locations. Configure your GEMINI_API_KEY in backend/.env for full AI capabilities. Try asking about revenue, door counts, or store comparisons!"
+        return f"I'm the GWSA GeoAnalytics AI assistant running in demo mode. I can help analyze store performance, door counts, revenue trends, and compare locations. Configure Azure OpenAI in backend/.env for full AI capabilities. Try asking about revenue, door counts, or store comparisons!"
