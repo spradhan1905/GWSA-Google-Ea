@@ -815,7 +815,22 @@ def get_location_summary(store_id: str, today: Optional[date] = None) -> dict:
     return summary
 
 
-def compare_locations(metric: str, store_refs: list, today: Optional[date] = None) -> dict:
+def _is_current_month_timeframe(start: str, end: str, current_day: date) -> bool:
+    """TotalCoreTableFinal is the daily current-month source; older periods use monthly financials."""
+    try:
+        start_day = date.fromisoformat(start)
+        end_day = date.fromisoformat(end)
+    except (TypeError, ValueError):
+        return False
+    return (
+        start_day.year == current_day.year
+        and start_day.month == current_day.month
+        and end_day.year == current_day.year
+        and end_day.month == current_day.month
+    )
+
+
+def compare_locations(metric: str, store_refs: list, today: Optional[date] = None, timeframe: Optional[dict] = None) -> dict:
     """Compare approved metrics across up to two locations."""
     current_day = today or date.today()
     resolved = []
@@ -828,9 +843,17 @@ def compare_locations(metric: str, store_refs: list, today: Optional[date] = Non
         return {"metric": metric, "locations": []}
 
     comparisons = []
+    if timeframe:
+        start = timeframe["start"]
+        end = timeframe["end"]
+    else:
+        start = ""
+        end = ""
+
     if metric == "door_count":
-        start = (current_day - timedelta(days=29)).isoformat()
-        end = current_day.isoformat()
+        if not timeframe:
+            start = (current_day - timedelta(days=29)).isoformat()
+            end = current_day.isoformat()
         for loc in resolved:
             rows = get_door_count(str(loc["LocationID"]), start, end)
             comparisons.append({
@@ -840,10 +863,17 @@ def compare_locations(metric: str, store_refs: list, today: Optional[date] = Non
             })
         timeframe = {"start": start, "end": end}
     else:
-        start = _month_start(current_day).isoformat()
-        end = current_day.isoformat()
+        if not timeframe:
+            start = _month_start(current_day).isoformat()
+            end = current_day.isoformat()
+        use_current_month_source = _is_current_month_timeframe(start, end, current_day)
         for loc in resolved:
-            rows = get_financials(str(loc["LocationID"]), start, end, this_month=True)
+            rows = get_financials(
+                str(loc["LocationID"]),
+                start,
+                end,
+                this_month=use_current_month_source,
+            )
             comparisons.append({
                 "location_id": str(loc["LocationID"]),
                 "location_name": loc.get("LocationName"),
@@ -860,15 +890,25 @@ def compare_locations(metric: str, store_refs: list, today: Optional[date] = Non
     }
 
 
-def rank_locations(metric: str, limit: int = 5, today: Optional[date] = None) -> dict:
+def rank_locations(metric: str, limit: int = 5, today: Optional[date] = None, timeframe: Optional[dict] = None) -> dict:
     """Rank locations by an approved metric using parameterized queries only."""
     current_day = today or date.today()
-    locations = get_locations()
+    locations = [
+        loc for loc in get_locations()
+        if not _is_consolidated_location(str(loc.get("LocationID", "")))
+    ]
     rows = []
+    if timeframe:
+        start = timeframe["start"]
+        end = timeframe["end"]
+    else:
+        start = ""
+        end = ""
 
     if metric == "door_count":
-        start = (current_day - timedelta(days=29)).isoformat()
-        end = current_day.isoformat()
+        if not timeframe:
+            start = (current_day - timedelta(days=29)).isoformat()
+            end = current_day.isoformat()
         for loc in locations:
             counts = get_door_count(str(loc["LocationID"]), start, end)
             rows.append({
@@ -877,10 +917,17 @@ def rank_locations(metric: str, limit: int = 5, today: Optional[date] = None) ->
                 "metric_value": int(round(_sum_field(counts, "DonorVisits"))),
             })
     else:
-        start = _month_start(current_day).isoformat()
-        end = current_day.isoformat()
+        if not timeframe:
+            start = _month_start(current_day).isoformat()
+            end = current_day.isoformat()
+        use_current_month_source = _is_current_month_timeframe(start, end, current_day)
         for loc in locations:
-            financials = get_financials(str(loc["LocationID"]), start, end, this_month=True)
+            financials = get_financials(
+                str(loc["LocationID"]),
+                start,
+                end,
+                this_month=use_current_month_source,
+            )
             rows.append({
                 "location_id": str(loc["LocationID"]),
                 "location_name": loc.get("LocationName"),
@@ -890,6 +937,6 @@ def rank_locations(metric: str, limit: int = 5, today: Optional[date] = None) ->
     ranked = sorted(rows, key=lambda item: item["metric_value"], reverse=True)[:max(1, min(limit, 10))]
     return {
         "metric": metric,
-        "timeframe": {"start": start, "end": end},
+        "timeframe": timeframe or {"start": start, "end": end},
         "locations": ranked,
     }

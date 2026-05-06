@@ -4,6 +4,8 @@ POST /api/chat — proxies to Azure OpenAI (key never in browser)
 """
 import json
 import re
+from calendar import monthrange
+from datetime import date, timedelta
 from flask import Blueprint, request, jsonify
 from marshmallow import ValidationError
 from middleware.security import limiter, ChatRequestSchema
@@ -24,6 +26,20 @@ INTENT_METRICS = {"revenue", "door_count"}
 RANK_HINTS = ("highest", "best", "top", "most", "lowest", "least")
 COMPARE_HINTS = ("compare", "vs", "versus", "against")
 SUMMARY_HINTS = ("summary", "how is", "how's", "performance", "doing")
+MONTH_NAMES = {
+    "january": 1, "jan": 1,
+    "february": 2, "feb": 2,
+    "march": 3, "mar": 3,
+    "april": 4, "apr": 4,
+    "may": 5,
+    "june": 6, "jun": 6,
+    "july": 7, "jul": 7,
+    "august": 8, "aug": 8,
+    "september": 9, "sep": 9, "sept": 9,
+    "october": 10, "oct": 10,
+    "november": 11, "nov": 11,
+    "december": 12, "dec": 12,
+}
 
 
 def _azure_openai_configured() -> bool:
@@ -155,6 +171,89 @@ def _detect_metric(user_message: str) -> str:
     return "revenue"
 
 
+def _month_window(year: int, month: int, label: str) -> dict:
+    last_day = monthrange(year, month)[1]
+    return {
+        "start": date(year, month, 1).isoformat(),
+        "end": date(year, month, last_day).isoformat(),
+        "label": label,
+    }
+
+
+def _parse_timeframe(user_message: str, today: date = None) -> dict:
+    """Resolve common natural-language date ranges without giving SQL access to the model."""
+    current_day = today or date.today()
+    text = (user_message or "").lower()
+
+    if any(token in text for token in ("this year", "year to date", "ytd")):
+        return {
+            "start": date(current_day.year, 1, 1).isoformat(),
+            "end": current_day.isoformat(),
+            "label": f"{current_day.year} year to date",
+        }
+
+    if "last year" in text:
+        year = current_day.year - 1
+        return {
+            "start": date(year, 1, 1).isoformat(),
+            "end": date(year, 12, 31).isoformat(),
+            "label": str(year),
+        }
+
+    if "this month" in text or "current month" in text:
+        return {
+            "start": date(current_day.year, current_day.month, 1).isoformat(),
+            "end": current_day.isoformat(),
+            "label": "this month",
+        }
+
+    if "last month" in text or "previous month" in text:
+        first_this_month = date(current_day.year, current_day.month, 1)
+        last_prev_month = first_this_month - timedelta(days=1)
+        return _month_window(
+            last_prev_month.year,
+            last_prev_month.month,
+            last_prev_month.strftime("%B %Y"),
+        )
+
+    if "last 30" in text or "past 30" in text:
+        return {
+            "start": (current_day - timedelta(days=29)).isoformat(),
+            "end": current_day.isoformat(),
+            "label": "last 30 days",
+        }
+
+    month_match = re.search(
+        r"\b("
+        r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+        r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?|tember)?|oct(?:ober)?|"
+        r"nov(?:ember)?|dec(?:ember)?"
+        r")\b(?:\s+(\d{4}))?",
+        text,
+    )
+    if month_match:
+        raw_month = month_match.group(1)
+        month = MONTH_NAMES[raw_month[:3] if raw_month != "may" else raw_month]
+        explicit_year = month_match.group(2)
+        if explicit_year:
+            year = int(explicit_year)
+        else:
+            year = current_day.year if month <= current_day.month else current_day.year - 1
+        return _month_window(year, month, date(year, month, 1).strftime("%B %Y"))
+
+    year_match = re.search(r"\b(20\d{2})\b", text)
+    if year_match:
+        year = int(year_match.group(1))
+        end = current_day if year == current_day.year else date(year, 12, 31)
+        return {
+            "start": date(year, 1, 1).isoformat(),
+            "end": end.isoformat(),
+            "label": str(year) if year != current_day.year else f"{year} year to date",
+        }
+
+    return None
+
+
 def _plan_request(user_message: str, store_context: str, history: list) -> dict:
     """Choose an approved analytics action with local heuristics to avoid extra AI calls."""
     from db.queries import get_location_catalog
@@ -162,6 +261,7 @@ def _plan_request(user_message: str, store_context: str, history: list) -> dict:
     catalog = get_location_catalog(limit=60)
     text = (user_message or "").lower()
     metric = _detect_metric(user_message)
+    timeframe = _parse_timeframe(user_message)
     store_names = _match_store_names(user_message, catalog)
     use_viewing_store = bool(store_context) and any(token in text for token in ("this store", "selected store", "viewing", "here"))
 
@@ -183,6 +283,7 @@ def _plan_request(user_message: str, store_context: str, history: list) -> dict:
         "store_names": [str(name).strip()[:80] for name in store_names[:2] if str(name).strip()],
         "use_viewing_store": use_viewing_store,
         "limit": max(1, min(parsed_limit, 10)),
+        "timeframe": timeframe,
     }
 
 
@@ -254,10 +355,19 @@ def _ai_error_response(exc: Exception, data_action: str, analytics_data: dict):
 
 def _execute_approved_action(plan: dict, store_context: str):
     """Run only approved parameterized analytics helpers."""
-    from db.queries import compare_locations, get_location_summary, rank_locations, resolve_location_reference
+    from db.queries import (
+        compare_locations,
+        get_door_count,
+        get_financials,
+        get_location_summary,
+        rank_locations,
+        resolve_location_reference,
+        _sum_field,
+    )
 
     action = plan["action"]
     metric = plan["metric"]
+    timeframe = plan.get("timeframe")
     selected_action = None
     data = None
 
@@ -270,7 +380,27 @@ def _execute_approved_action(plan: dict, store_context: str):
         elif plan["use_viewing_store"] and viewing_location:
             target_ref = str(viewing_location["LocationID"])
 
-        if target_ref:
+        if target_ref and timeframe:
+            location = resolve_location_reference(target_ref)
+            if location:
+                location_id = str(location["LocationID"])
+                if metric == "door_count":
+                    rows = get_door_count(location_id, timeframe["start"], timeframe["end"])
+                    metrics = {"door_count": int(round(_sum_field(rows, "DonorVisits")))}
+                else:
+                    rows = get_financials(location_id, timeframe["start"], timeframe["end"])
+                    metrics = {"revenue": _sum_field(rows, "NetRevenue")}
+                data = {
+                    "location_id": location_id,
+                    "location_name": location.get("LocationName"),
+                    "location_type": location.get("LocationType"),
+                    "metric": metric,
+                    "timeframe": timeframe,
+                    "metrics": metrics,
+                    "rows": rows,
+                }
+                selected_action = f"location_summary:{metric}"
+        elif target_ref:
             data = get_location_summary(target_ref)
             if data:
                 selected_action = "location_summary"
@@ -279,12 +409,12 @@ def _execute_approved_action(plan: dict, store_context: str):
         refs = list(plan["store_names"])
         if plan["use_viewing_store"] and viewing_location:
             refs.append(str(viewing_location["LocationID"]))
-        data = compare_locations(metric, refs)
+        data = compare_locations(metric, refs, timeframe=timeframe)
         if data.get("locations") and len(data["locations"]) >= 2:
             selected_action = f"compare_locations:{metric}"
 
     elif action == "rank_locations":
-        data = rank_locations(metric, plan["limit"])
+        data = rank_locations(metric, plan["limit"], timeframe=timeframe)
         if data.get("locations"):
             selected_action = f"rank_locations:{metric}"
 
