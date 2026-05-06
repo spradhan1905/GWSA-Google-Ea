@@ -6,7 +6,8 @@ Table/view names come from Config (env) and are validated before use in SQL text
 from db.connection import get_connection
 from config import Config
 from datetime import date, datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+import concurrent.futures
 import decimal
 import json
 import math
@@ -949,6 +950,76 @@ def rank_locations(metric: str, limit: int = 5, today: Optional[date] = None, ti
     }
 
 
+def _sql_parallel_workers(job_count: int) -> int:
+    """Bounded worker count for parallel per-store queries (avoid hammering SQL Server)."""
+    jc = max(0, int(job_count))
+    if jc <= 0:
+        return 1
+    return max(1, min(16, jc))
+
+
+def _peak_daily_candidates_for_location(loc: dict, start_date: str, end_date: str) -> List[dict]:
+    lid = str(loc["LocationID"])
+    rows = get_financials(lid, start_date, end_date, this_month=True)
+    out = []
+    for row in rows:
+        sd = row.get("SalesDate")
+        if sd is None:
+            continue
+        dk = sd.isoformat() if hasattr(sd, "isoformat") else str(sd)[:10]
+        rev = _coerce_number(row.get("NetRevenue"))
+        out.append({
+            "location_id": lid,
+            "location_name": loc.get("LocationName"),
+            "date": dk,
+            "metric_value": round(rev, 2),
+        })
+    return out
+
+
+def _revenue_days_fragment(loc: dict, start_date: str, end_date: str, allowed_types: Optional[frozenset]) -> Dict[str, float]:
+    lid = str(loc.get("LocationID", "") or "").strip()
+    if _is_consolidated_location(lid):
+        return {}
+    lt = str(loc.get("LocationType") or "").strip().lower()
+    if allowed_types is not None and lt not in allowed_types:
+        return {}
+    fragment: Dict[str, float] = {}
+    rows = get_financials(lid, start_date, end_date, this_month=True)
+    for row in rows:
+        sd = row.get("SalesDate")
+        if sd is None:
+            continue
+        dk = sd.isoformat() if hasattr(sd, "isoformat") else str(sd)[:10]
+        val = row.get("NetRevenue")
+        fv = float(_coerce_number(val)) if val is not None else 0.0
+        fragment[dk] = fragment.get(dk, 0.0) + fv
+    return fragment
+
+
+def _door_count_days_fragment(loc: dict, start_date: str, end_date: str, allowed_types: Optional[frozenset]) -> Dict[str, float]:
+    lid = str(loc.get("LocationID", "") or "").strip()
+    if _is_consolidated_location(lid):
+        return {}
+    lt = str(loc.get("LocationType") or "").strip().lower()
+    if allowed_types is not None and lt not in allowed_types:
+        return {}
+    fragment: Dict[str, float] = {}
+    rows = get_door_count(lid, start_date, end_date)
+    for row in rows:
+        cd = row.get("CountDate")
+        if cd is None:
+            continue
+        dk = cd.isoformat() if hasattr(cd, "isoformat") else str(cd)[:10]
+        fragment[dk] = fragment.get(dk, 0.0) + float(_coerce_number(row.get("DonorVisits")))
+    return fragment
+
+
+def _merge_numeric_day_maps(target: Dict[str, float], fragment: Dict[str, float]) -> None:
+    for k, v in fragment.items():
+        target[k] = target.get(k, 0.0) + v
+
+
 def _retail_scope_filter(scope: str) -> Tuple[Optional[frozenset], str]:
     """Return (allowed lowercased LocationType set, scope label) or (None for all non-consolidated)."""
     sl = (scope or "all_retail_stores").strip().lower()
@@ -973,23 +1044,19 @@ def rank_revenue_days(
     """
     allowed_types, scope_key = _retail_scope_filter(scope)
     locations = get_locations()
-    by_day = {}
-    for loc in locations:
-        lid = str(loc.get("LocationID", "") or "").strip()
-        if _is_consolidated_location(lid):
-            continue
-        lt = str(loc.get("LocationType") or "").strip().lower()
-        if allowed_types is not None and lt not in allowed_types:
-            continue
-        rows = get_financials(lid, start_date, end_date, this_month=True)
-        for row in rows:
-            sd = row.get("SalesDate")
-            if sd is None:
-                continue
-            sd_key = sd.isoformat() if hasattr(sd, "isoformat") else str(sd)[:10]
-            val = row.get("NetRevenue")
-            fv = float(_coerce_number(val)) if val is not None else 0.0
-            by_day[sd_key] = by_day.get(sd_key, 0.0) + fv
+    by_day: Dict[str, float] = {}
+    if len(locations) <= 1:
+        for loc in locations:
+            _merge_numeric_day_maps(by_day, _revenue_days_fragment(loc, start_date, end_date, allowed_types))
+    else:
+        workers = _sql_parallel_workers(len(locations))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [
+                pool.submit(_revenue_days_fragment, loc, start_date, end_date, allowed_types)
+                for loc in locations
+            ]
+            for fu in concurrent.futures.as_completed(futs):
+                _merge_numeric_day_maps(by_day, fu.result())
 
     cap = max(1, min(int(limit), 31))
     periods = sorted(
@@ -1036,21 +1103,19 @@ def rank_door_count_days(
     allowed_types, scope_key = _retail_scope_filter(scope)
     locations = get_locations()
     tbl = _validated_door_count_object()
-    by_day = {}
-    for loc in locations:
-        lid = str(loc.get("LocationID", "") or "").strip()
-        if _is_consolidated_location(lid):
-            continue
-        lt = str(loc.get("LocationType") or "").strip().lower()
-        if allowed_types is not None and lt not in allowed_types:
-            continue
-        rows = get_door_count(lid, start_date, end_date)
-        for row in rows:
-            cd = row.get("CountDate")
-            if cd is None:
-                continue
-            dk = cd.isoformat() if hasattr(cd, "isoformat") else str(cd)[:10]
-            by_day[dk] = by_day.get(dk, 0.0) + float(_coerce_number(row.get("DonorVisits")))
+    by_day: Dict[str, float] = {}
+    if len(locations) <= 1:
+        for loc in locations:
+            _merge_numeric_day_maps(by_day, _door_count_days_fragment(loc, start_date, end_date, allowed_types))
+    else:
+        workers = _sql_parallel_workers(len(locations))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [
+                pool.submit(_door_count_days_fragment, loc, start_date, end_date, allowed_types)
+                for loc in locations
+            ]
+            for fu in concurrent.futures.as_completed(futs):
+                _merge_numeric_day_maps(by_day, fu.result())
 
     cap = max(1, min(int(limit), 31))
     periods = sorted(
@@ -1218,22 +1283,20 @@ def peak_store_daily_revenue(
     if cat:
         filter_notes.append(f"Category/RevenueType = {cat}")
 
+    locs = list(_iterate_scoped_locations(scope))
     candidates: List[dict] = []
-    for loc in _iterate_scoped_locations(scope):
-        lid = str(loc["LocationID"])
-        rows = get_financials(lid, start_date, end_date, this_month=True)
-        for row in rows:
-            sd = row.get("SalesDate")
-            if sd is None:
-                continue
-            dk = sd.isoformat() if hasattr(sd, "isoformat") else str(sd)[:10]
-            rev = _coerce_number(row.get("NetRevenue"))
-            candidates.append({
-                "location_id": lid,
-                "location_name": loc.get("LocationName"),
-                "date": dk,
-                "metric_value": round(rev, 2),
-            })
+    if len(locs) <= 1:
+        for loc in locs:
+            candidates.extend(_peak_daily_candidates_for_location(loc, start_date, end_date))
+    else:
+        workers = _sql_parallel_workers(len(locs))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [
+                pool.submit(_peak_daily_candidates_for_location, loc, start_date, end_date)
+                for loc in locs
+            ]
+            for fu in concurrent.futures.as_completed(futs):
+                candidates.extend(fu.result())
 
     candidates.sort(key=lambda x: x["metric_value"], reverse=True)
     top = candidates[:cap]

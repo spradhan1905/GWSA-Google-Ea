@@ -35,7 +35,8 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
 
     try {
       const history = messages.slice(-10).map(m => ({
-        role: m.role, content: m.content,
+        role: m.role,
+        content: m.content,
       }));
       const res = await sendChatMessage(text, storeContext, history);
       const data = res.data;
@@ -50,9 +51,13 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
       let errorMsg = 'Sorry, I encountered an error. Please try again.';
       if (err.code === 'ECONNABORTED') {
         errorMsg =
-          'This request hit the wait limit before the server finished (often slow SQL + model time). ' +
-          'Try a shorter range or a simpler question, or increase VITE_CHAT_TIMEOUT_MS in the frontend env. ' +
-          'If it keeps happening, check AI_COMPLETION_TIMEOUT_SEC on the backend.';
+          'That took longer than expected, so the request was stopped. '
+          + 'Try again with a narrower date range or a single focused question. '
+          + 'If this keeps happening often, your team can raise the chat timeout in deployment settings.';
+        if (import.meta.env.DEV) {
+          errorMsg +=
+            ' Dev note: `VITE_CHAT_TIMEOUT_MS` (frontend) and `AI_COMPLETION_TIMEOUT_SEC` (backend).';
+        }
       } else if (typeof err.response?.data?.reply === 'string' && err.response.data.reply.trim()) {
         errorMsg = err.response.data.reply;
       } else if (err.response?.status === 429) {
@@ -61,7 +66,7 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
         errorMsg = err.response.data.error;
       }
       console.error('[Chat] Request failed', err.response?.data || err.message || err);
-      setMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: errorMsg, isError: true }]);
     } finally {
       setLoading(false);
     }

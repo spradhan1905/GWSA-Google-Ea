@@ -2,7 +2,7 @@
 import re
 from calendar import monthrange
 from datetime import date, timedelta
-from typing import Optional
+from typing import List, Optional
 
 from ai.schemas import (
     COMPARE_HINTS,
@@ -347,9 +347,66 @@ def resolve_trend_reference(store_names: list, use_viewing_store: bool, store_co
     return None, None
 
 
-def plan_request(user_message: str, store_context: str, _history: list) -> dict:
+def _last_message_content(history: List[dict], role: str) -> str:
+    if not history:
+        return ""
+    for msg in reversed(history):
+        if msg.get("role") != role:
+            continue
+        c = (msg.get("content") or "").strip()
+        if c:
+            return c
+    return ""
+
+
+def _concat_user_contents(history: List[dict], max_messages: int = 8) -> str:
+    chunks = []
+    for msg in history:
+        if msg.get("role") != "user":
+            continue
+        c = (msg.get("content") or "").strip()
+        if c:
+            chunks.append(c)
+    return "\n".join(chunks[-max_messages:])
+
+
+def _is_short_affirmation(text: str) -> bool:
+    """True for brief replies that continue the prior assistant offer (e.g. \"okay do that\")."""
+    t = (text or "").strip().lower()
+    if not t or len(t) > 100:
+        return False
+    if re.match(
+        r"^(?:\s*(?:ok+|okay|sure|yeah|yep|yes|please|thanks?|thank you)\b[!\s,.]*)+"
+        r'|^\s*(?:go ahead|do (?:it|that)|sounds good|that works|fine|please do)\b[!\s,.]*'
+        r"|^\s*i(?:'d| would) like that\s*[!.]*\s*$",
+        t,
+        re.I,
+    ):
+        return True
+    if len(t) <= 48 and any(
+        p in t for p in ("compare", "do that", "side by side", "show me", "rank them", "break it down")
+    ):
+        return True
+    return False
+
+
+def _assistant_offered_store_comparison(assistant_text: str) -> bool:
+    """Detect when the last reply offered to compare or rank multiple stores."""
+    t = (assistant_text or "").lower()
+    if "side by side" in t:
+        return True
+    if "compare" in t and any(w in t for w in ("store", "stores", "location", "locations", "outlet", "outlets")):
+        return True
+    if "top" in t and "store" in t and any(w in t for w in ("compare", "versus", " vs ", " vs.", "against", "rank")):
+        return True
+    return False
+
+
+def plan_request(user_message: str, store_context: str, history: Optional[list] = None) -> dict:
     """Choose an approved analytics action with local heuristics."""
     from db.queries import get_location_catalog
+
+    history = history or []
 
     catalog = get_location_catalog(limit=60)
     text_raw = user_message or ""
@@ -446,7 +503,27 @@ def plan_request(user_message: str, store_context: str, _history: list) -> dict:
         action = "location_summary"
         intent = "location_summary"
 
+    if (
+        not unsupported_manager
+        and intent == "unsupported"
+        and _is_short_affirmation(text_raw)
+        and history
+    ):
+        assistant_prev = _last_message_content(history, "assistant")
+        if assistant_prev and _assistant_offered_store_comparison(assistant_prev):
+            transcript = _concat_user_contents(history)
+            tf_follow = parse_timeframe(transcript) or parse_timeframe(assistant_prev)
+            if tf_follow:
+                intent = "rank_locations"
+                action = "rank_locations"
+                timeframe = tf_follow
+                metric = detect_metric(transcript + " " + assistant_prev[:600])
+
     trend_ref, trend_ref_kind = resolve_trend_reference(store_names, use_viewing_store, store_context)
+
+    limit_out = max(1, min(parsed_limit, 10))
+    if intent == "rank_locations" and action == "rank_locations" and _is_short_affirmation(text_raw):
+        limit_out = max(limit_out, min(8, 10))
 
     return {
         "intent": intent,
@@ -456,7 +533,7 @@ def plan_request(user_message: str, store_context: str, _history: list) -> dict:
         "scope": scope,
         "store_names": [str(name).strip()[:80] for name in store_names[:2] if str(name).strip()],
         "use_viewing_store": use_viewing_store,
-        "limit": max(1, min(parsed_limit, 10)),
+        "limit": limit_out,
         "timeframe": timeframe,
         "trend_months": trend_months,
         "trend_store_ref": trend_ref,

@@ -32,7 +32,9 @@ export default function ChatMessage({ message }) {
       {/* Bubble */}
       <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 ${
         isAI
-          ? 'bg-gwsa-bg-alt border border-gwsa-border text-gwsa-text'
+          ? message.isError
+            ? 'bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 text-gwsa-text'
+            : 'bg-gwsa-bg-alt border border-gwsa-border text-gwsa-text'
           : 'bg-gwsa-accent text-white'
       }`}>
         {isAI ? (

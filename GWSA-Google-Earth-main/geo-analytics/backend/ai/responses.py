@@ -46,8 +46,9 @@ def timeframe_required_gap_body() -> dict:
 def unsupported_question_body() -> dict:
     return {
         "reply": (
-            "I answer only using approved GeoAnalytics datasets (sales, visits, trends, comparisons). "
-            "I cannot provide individual manager identities or unstructured HR details."
+            "I work from the GeoAnalytics data in this app—sales, door traffic, trends, and store comparisons. "
+            "I couldn’t map that message to a specific report. Try adding a month or date range, naming stores to compare, "
+            "or rephrasing as a single analytics question. (Manager names and other HR details aren’t available here.)"
         ),
         "sql_used": "unsupported",
         "data": {"intent": "unsupported", "reason": "policy_or_unsupported_question"},

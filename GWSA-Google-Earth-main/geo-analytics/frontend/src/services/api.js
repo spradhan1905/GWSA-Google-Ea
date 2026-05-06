@@ -22,7 +22,7 @@ const DEFAULT_TIMEOUT_MS =
 const CHAT_TIMEOUT_MS =
   Number(import.meta.env.VITE_CHAT_TIMEOUT_MS) > 0
     ? Number(import.meta.env.VITE_CHAT_TIMEOUT_MS)
-    : 180000;
+    : 300000;
 
 const api = axios.create({
   baseURL: axiosBaseURL,
