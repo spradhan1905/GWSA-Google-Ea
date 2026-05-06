@@ -8,9 +8,22 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="icon" type="image/png" href="/assets/goodwill-san-antonio-logo.png" />
-    <link rel="shortcut icon" type="image/png" href="/assets/goodwill-san-antonio-logo.png" />
-    <link rel="apple-touch-icon" href="/assets/goodwill-san-antonio-logo.png" />
+    <link rel="icon" type="image/png" href="/assets/goodwill-san-antonio-logo.png?v=gwsa-logo-2" />
+    <link rel="shortcut icon" type="image/png" href="/assets/goodwill-san-antonio-logo.png?v=gwsa-logo-2" />
+    <link rel="apple-touch-icon" href="/assets/goodwill-san-antonio-logo.png?v=gwsa-logo-2" />
+    <script>
+      (() => {
+        const iconUrl = '/assets/goodwill-san-antonio-logo.png?v=gwsa-logo-2';
+        document.querySelectorAll("link[rel*='icon']").forEach((link) => link.remove());
+        ['icon', 'shortcut icon', 'apple-touch-icon'].forEach((rel) => {
+          const link = document.createElement('link');
+          link.rel = rel;
+          link.type = 'image/png';
+          link.href = iconUrl;
+          document.head.appendChild(link);
+        });
+      })();
+    </script>
   </head>
   <body class="bg-gwsa-bg text-gwsa-text font-sans antialiased">
     <div id="root"></div>
