@@ -4,8 +4,10 @@
  */
 import React, { useState } from 'react';
 import { useMsal } from '@azure/msal-react';
-import { Globe, LogIn, ShieldCheck } from 'lucide-react';
+import { LogIn, ShieldCheck } from 'lucide-react';
 import { loginRequest } from './msalConfig';
+
+const GWSA_LOGO_URL = '/assets/goodwill-san-antonio-logo.png';
 
 export default function LoginScreen() {
   const { instance } = useMsal();
@@ -28,8 +30,13 @@ export default function LoginScreen() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200 px-6">
       <div className="w-full max-w-md rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-xl p-8">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-sky-500 to-blue-500 flex items-center justify-center shadow-md text-white">
-            <Globe className="w-5 h-5" aria-hidden />
+          <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shadow-md overflow-hidden">
+            <img
+              src={GWSA_LOGO_URL}
+              alt=""
+              className="w-full h-full object-contain"
+              aria-hidden
+            />
           </div>
           <div>
             <p className="text-[11px] font-semibold tracking-[0.2em] text-slate-500 uppercase">
