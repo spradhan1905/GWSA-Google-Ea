@@ -98,6 +98,7 @@ def chat():
                     analytics_data,
                     gap_desc,
                 ),
+                timeout=Config.AI_COMPLETION_TIMEOUT_SEC,
             )
             reply = response.choices[0].message.content or ""
         else:

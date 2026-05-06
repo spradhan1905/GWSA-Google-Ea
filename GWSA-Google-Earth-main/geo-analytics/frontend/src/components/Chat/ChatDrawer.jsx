@@ -49,7 +49,10 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
     } catch (err) {
       let errorMsg = 'Sorry, I encountered an error. Please try again.';
       if (err.code === 'ECONNABORTED') {
-        errorMsg = 'The AI response is taking longer than expected. Please try again in a moment.';
+        errorMsg =
+          'This request hit the wait limit before the server finished (often slow SQL + model time). ' +
+          'Try a shorter range or a simpler question, or increase VITE_CHAT_TIMEOUT_MS in the frontend env. ' +
+          'If it keeps happening, check AI_COMPLETION_TIMEOUT_SEC on the backend.';
       } else if (typeof err.response?.data?.reply === 'string' && err.response.data.reply.trim()) {
         errorMsg = err.response.data.reply;
       } else if (err.response?.status === 429) {

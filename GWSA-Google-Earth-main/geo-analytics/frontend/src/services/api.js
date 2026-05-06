@@ -12,9 +12,21 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 // If API_BASE_URL is set (e.g. https://backend.example.com), we call `${API_BASE_URL}/api/*`.
 const axiosBaseURL = `${API_BASE_URL}/api`.replace(/\/+$/, '/api');
 
+/** Default axios timeout for quick API calls (not chat — chat overrides below). */
+const DEFAULT_TIMEOUT_MS =
+  Number(import.meta.env.VITE_API_TIMEOUT_MS) > 0
+    ? Number(import.meta.env.VITE_API_TIMEOUT_MS)
+    : 60000;
+
+/** Chat runs DB work + LLM; allow longer wait than general API (was 60s and caused ECONNABORTED). */
+const CHAT_TIMEOUT_MS =
+  Number(import.meta.env.VITE_CHAT_TIMEOUT_MS) > 0
+    ? Number(import.meta.env.VITE_CHAT_TIMEOUT_MS)
+    : 180000;
+
 const api = axios.create({
   baseURL: axiosBaseURL,
-  timeout: 60000,
+  timeout: DEFAULT_TIMEOUT_MS,
   headers: { 'Content-Type': 'application/json' },
   withCredentials: authConfigured,
 });
@@ -58,7 +70,11 @@ export const fetchTrends = (storeId, months = 12) =>
   api.get(`/trends/${encodeURIComponent(storeId)}`, { params: { months } });
 
 export const sendChatMessage = (message, storeContext, history) =>
-  api.post('/chat', { message, store_context: storeContext, conversation_history: history });
+  api.post(
+    '/chat',
+    { message, store_context: storeContext, conversation_history: history },
+    { timeout: CHAT_TIMEOUT_MS },
+  );
 
 export const checkHealth = () => api.get('/health');
 

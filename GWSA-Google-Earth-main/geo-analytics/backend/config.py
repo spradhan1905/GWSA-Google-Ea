@@ -69,6 +69,14 @@ class Config:
     AZURE_OPENAI_API_VERSION = os.environ.get(
         'AZURE_OPENAI_API_VERSION', '2025-01-01-preview'
     ).strip()
+    # Max seconds waiting for Azure OpenAI streaming completion (whole response). Frontend request timeout should exceed this slightly.
+    try:
+        AI_COMPLETION_TIMEOUT_SEC = float(
+            (os.environ.get('AI_COMPLETION_TIMEOUT_SEC') or '165').strip()
+        )
+    except ValueError:
+        AI_COMPLETION_TIMEOUT_SEC = 165.0
+    AI_COMPLETION_TIMEOUT_SEC = max(30.0, min(AI_COMPLETION_TIMEOUT_SEC, 600.0))
 
     # Gemini AI (legacy fallback for older local environments)
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
