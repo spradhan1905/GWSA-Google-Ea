@@ -83,6 +83,8 @@ full_year, quarter, last_quarter, last_week
 4. If timeframe is missing and the user did not imply one, timeframe may be null + medium confidence.
 5. "Performance"/"how's it doing" → `multi_metric_summary` with several helpful metrics.
 6. People/managers → `unsupported`.
+7. "How does <named month> [<year>] compare to the previous/last month" or "... month before" →
+   `compare_periods` with `timeframe` = that month and `timeframe_b` = the prior calendar month.
 
 ## Few-shot anchors
 
@@ -106,6 +108,9 @@ User: Top 5 stores by revenue in March
 
 User: Compare DeZavala and Blanco for March revenue
 {"intent":"compare_locations","metrics":["revenue"],"grain":"month","scope":"location","locations":["DeZavala","Blanco"],"timeframe":{"type":"named_month","month_name":"March","year":2026,"n_days":null,"start":null,"end":null,"quarter":null},"timeframe_b":null,"limit":null,"sort_direction":"desc","requires_chart":true,"confidence":"high"}
+
+User: How does February 2026 compare to the previous month?
+{"intent":"compare_periods","metrics":["revenue"],"grain":"month","scope":"all_retail_stores","locations":[],"timeframe":{"type":"named_month","month_name":"February","year":2026,"n_days":null,"start":null,"end":null,"quarter":null},"timeframe_b":{"type":"named_month","month_name":"January","year":2026,"n_days":null,"start":null,"end":null,"quarter":null},"limit":null,"sort_direction":"desc","requires_chart":true,"confidence":"high"}
 
 User: Who manages Blanco?
 {"intent":"unsupported","metrics":[],"grain":null,"scope":null,"locations":["Blanco"],"timeframe":null,"timeframe_b":null,"limit":null,"sort_direction":null,"requires_chart":false,"confidence":"high"}

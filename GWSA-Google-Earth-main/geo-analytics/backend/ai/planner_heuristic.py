@@ -91,6 +91,29 @@ def _month_window_tf(year: int, month_num: int, label: str) -> dict:
     }
 
 
+def _infer_year_for_named_calendar_month(month_num: int, explicit_year: Optional[int], current_day: date) -> int:
+    if explicit_year is not None:
+        return int(explicit_year)
+    year = current_day.year
+    if month_num > current_day.month:
+        year -= 1
+    return year
+
+
+def _named_month_vs_previous_month_pair(
+    month_num: int, explicit_year_g: Optional[str], current_day: date
+) -> dict:
+    """Focal calendar month vs the preceding calendar month (e.g. follow-up chips)."""
+    explicit_y = int(explicit_year_g) if explicit_year_g else None
+    y_focus = _infer_year_for_named_calendar_month(month_num, explicit_y, current_day)
+    tfa = _month_window_tf(y_focus, month_num, "")
+    tfa["label"] = date(y_focus, month_num, 1).strftime("%B %Y")
+    first_focus = date(y_focus, month_num, 1)
+    prev_anchor = first_focus - timedelta(days=1)
+    tfb = _month_window_tf(prev_anchor.year, prev_anchor.month, prev_anchor.strftime("%B %Y"))
+    return {"timeframe_a": tfa, "timeframe_b": tfb}
+
+
 def infer_scope(user_message: str) -> str:
     t = (user_message or "").lower()
     if "all location" in t or "every location" in t or "whole network" in t:
@@ -139,6 +162,28 @@ def parse_comparison_timeframes(user_message: str, today: date = None):
         if "this" in g1 or "current" in g1:
             return {"timeframe_a": _this_month(), "timeframe_b": _last_month()}
         return {"timeframe_a": _last_month(), "timeframe_b": _this_month()}
+
+    # "How does February 2026 compare to the previous month?" (chip wording; no "Feb vs Jan")
+    m_np = re.search(
+        rf"\b({_MONTH_NAMES_PATTERN})\b(?:\s+(20\d{{2}}))?.*?\b(?:compare|compared)\s+(?:with|to)\s+"
+        r"(?:the\s+)?(?:(?:previous|prior|last)\s+month|month\s+before)\b",
+        text,
+        re.I,
+    )
+    if m_np:
+        ma = _month_num_from_word(m_np.group(1))
+        return _named_month_vs_previous_month_pair(ma, m_np.group(2), current_day)
+
+    m_pn = re.search(
+        r"(?:the\s+)?(?:(?:previous|prior|last)\s+month|month\s+before).*?\b(?:compare|compared)\s+"
+        r"(?:with|to|against)\s+"
+        rf"\b({_MONTH_NAMES_PATTERN})\b(?:\s+(20\d{{2}}))?",
+        text,
+        re.I,
+    )
+    if m_pn:
+        ma = _month_num_from_word(m_pn.group(1))
+        return _named_month_vs_previous_month_pair(ma, m_pn.group(2), current_day)
 
     m = re.search(
         rf"\b({_MONTH_NAMES_PATTERN})(?:\s+(20\d{{2}}))?\s*"
