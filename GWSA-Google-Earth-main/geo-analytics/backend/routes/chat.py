@@ -7,7 +7,10 @@ from marshmallow import ValidationError
 from middleware.security import limiter, ChatRequestSchema
 from config import Config
 
-from db.analytics_actions import coerce_plan_for_daily_peak_questions
+from db.analytics_actions import (
+    coerce_plan_for_daily_peak_questions,
+    coerce_rank_time_period_session_store,
+)
 
 from ai.composer import (
     azure_openai_configured,
@@ -97,6 +100,7 @@ def chat():
         })
 
     plan = coerce_plan_for_daily_peak_questions(dict(plan), user_message)
+    plan = coerce_rank_time_period_session_store(plan, user_message, session.last_store_names)
 
     if plan.get("intent") == "greeting":
         merge_session_after_turn(session, {**plan, "intent": "greeting"}, None, store_context)

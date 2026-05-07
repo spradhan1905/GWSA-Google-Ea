@@ -1,6 +1,6 @@
 """Approved, parameterized analytics retrievals safe for chat (no dynamic SQL)."""
 from datetime import date
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Sequence, Tuple
 
 from ai.planner_heuristic import (
     detect_metric,
@@ -68,6 +68,72 @@ def coerce_plan_for_daily_peak_questions(plan: dict, user_message: Optional[str]
         p["metric"] = dm
     if not (p.get("store_names") or []):
         p["store_names"] = match_store_names(text, get_location_catalog(limit=80))[:2]
+    return p
+
+
+def _implies_network_wide_time_ranking(user_message: Optional[str]) -> bool:
+    """True when the user asked for totals across stores, not a continuation focused on one store."""
+    if not user_message or not str(user_message).strip():
+        return False
+    low = str(user_message).lower()
+    needles = (
+        "all stores",
+        "every store",
+        "across stores",
+        "each store",
+        "all locations",
+        "network wide",
+        "network-wide",
+        "whole network",
+        "company wide",
+        "company-wide",
+        "entire retail",
+        "retail chain",
+        "sum across",
+        "combined for all",
+    )
+    return any(n in low for n in needles)
+
+
+def coerce_rank_time_period_session_store(
+    plan: dict,
+    user_message: Optional[str],
+    last_store_names: Optional[Sequence[Any]],
+) -> dict:
+    """
+    If rank_time_periods has no resolved store yet, carry forward exactly one previously discussed
+    store so ambiguous follow-ups (e.g. chip text omitting store name) use per-location daily totals
+    instead of ranking network-wide summed days—prevents inflated numbers wrongly narrated as one store.
+    """
+    if not isinstance(plan, dict):
+        return plan
+    if plan.get("action") != "rank_time_periods" and plan.get("intent") != "rank_time_periods":
+        return plan
+    names = plan.get("store_names") or []
+    if isinstance(names, str):
+        names = [names]
+    names = [str(n).strip() for n in names if str(n).strip()]
+    if len(names) >= 1:
+        return plan
+    if plan.get("use_viewing_store") or plan.get("trend_store_ref"):
+        # Executor can resolve viewing / trend anchors without explicit store_names.
+        return plan
+    if _implies_network_wide_time_ranking(user_message):
+        return plan
+    if last_store_names is None:
+        last_store_names = []
+    ln = (
+        last_store_names
+        if isinstance(last_store_names, (list, tuple))
+        else [last_store_names]
+    )
+    carried = [str(x).strip() for x in ln if x and str(x).strip()]
+    if len(carried) != 1:
+        return plan
+    p = dict(plan)
+    p["store_names"] = [carried[0]]
+    # Hint for planner payloads / callers; executor keys off single store_names name.
+    p["scope"] = "location"
     return p
 
 

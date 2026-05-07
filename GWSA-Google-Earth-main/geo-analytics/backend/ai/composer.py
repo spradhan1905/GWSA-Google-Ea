@@ -157,6 +157,32 @@ def evidence_to_natural_language(data_action: Optional[str], data: dict) -> str:
         periods = list(data.get("periods") or [])
         mkey = str(data.get("metric") or "revenue")
         metric_label = mkey.replace("_", " ")
+        scope = str(data.get("scope") or "").strip()
+        loc_nm = str(data.get("location_name") or "").strip()
+        preamble = ""
+        if scope == "location" and loc_nm:
+            if mkey == "door_count":
+                preamble = (
+                    f"Single-store ranking (daily donor visits) for {loc_nm}. "
+                    "Do not describe these totals as network-wide sums. "
+                )
+            else:
+                preamble = (
+                    f"Single-store ranking (daily core revenue) for {loc_nm}. "
+                    "Do not describe these totals as network-wide sums. "
+                )
+        elif scope == "all_retail_stores":
+            if mkey == "door_count":
+                preamble = (
+                    "Network-wide ranking: donor visits are summed across all scoped retail stores per calendar day. "
+                    "Do not attribute these totals to one store unless a store name appears in evidence. "
+                )
+            else:
+                preamble = (
+                    "Network-wide ranking: amounts are summed across all scoped retail stores per calendar day "
+                    "(daily core revenue). "
+                    "Do not attribute these daily totals to one store unless a store name appears in evidence. "
+                )
         if periods:
             parts = []
             for i, p in enumerate(periods[:10], 1):
@@ -168,7 +194,10 @@ def evidence_to_natural_language(data_action: Optional[str], data: dict) -> str:
                     parts.append(f"{d} had core sales around {_fmt_metric_amount('revenue', mv)} (rank #{i})")
             period_bit = f"within {period}" if period else "in the requested range"
             prose = (
-                f"Daily picture for {metric_label} {period_bit}: " + "; ".join(parts) + "."
+                preamble
+                + f"Daily picture for {metric_label} {period_bit}: "
+                + "; ".join(parts)
+                + "."
             )
             return _cap_evidence_chars(prose)
         return _cap_evidence_chars(
