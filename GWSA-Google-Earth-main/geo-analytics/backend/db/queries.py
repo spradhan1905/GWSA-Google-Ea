@@ -1091,6 +1091,104 @@ def rank_revenue_days(
     }
 
 
+def rank_revenue_days_for_store(
+    store_id: str,
+    start_date: str,
+    end_date: str,
+    *,
+    limit: int = 5,
+    timeframe_label: Optional[str] = None,
+) -> dict:
+    """
+    Rank days by core revenue for one location using TotalCoreTableFinal daily rows
+    (via get_financials with this_month=True).
+    """
+    rows = get_financials(store_id, start_date, end_date, this_month=True)
+    day_rows: List[dict] = []
+    for row in rows:
+        sd = row.get("SalesDate")
+        if sd is None:
+            continue
+        dk = sd.isoformat() if hasattr(sd, "isoformat") else str(sd)[:10]
+        val = float(_coerce_number(row.get("NetRevenue")))
+        day_rows.append({"date": dk, "metric_value": round(val, 2)})
+    day_rows.sort(key=lambda x: x["metric_value"], reverse=True)
+    cap = max(1, min(int(limit), 31))
+    periods = day_rows[:cap]
+
+    loc = resolve_location_reference(store_id)
+    tf = {"start": start_date, "end": end_date}
+    if timeframe_label:
+        tf["label"] = timeframe_label
+    obj_name = _validated_this_month_revenue_object()
+    cat = (Config.SQL_SALES_CORE_CATEGORY or "").strip()
+    filter_notes: List[str] = [f"single store: {loc.get('LocationName') if loc else store_id}"]
+    if cat:
+        filter_notes.append(f"Category/RevenueType = {cat}")
+
+    return {
+        "metric": "revenue",
+        "grain": "day",
+        "scope": "location",
+        "location_id": str(store_id),
+        "location_name": loc.get("LocationName") if loc else None,
+        "timeframe": tf,
+        "periods": periods,
+        "source": {
+            "name": obj_name,
+            "grain": "daily",
+            "metric": "NetRevenue (Core) single store",
+            "date_range": f"{start_date} to {end_date}",
+            "filters": filter_notes,
+        },
+    }
+
+
+def rank_door_count_days_for_store(
+    store_id: str,
+    start_date: str,
+    end_date: str,
+    *,
+    limit: int = 5,
+    timeframe_label: Optional[str] = None,
+) -> dict:
+    """Rank days by donor visits for one store (PCounter daily rollup)."""
+    rows = get_door_count(store_id, start_date, end_date)
+    day_rows: List[dict] = []
+    for row in rows:
+        cd = row.get("CountDate")
+        if cd is None:
+            continue
+        dk = cd.isoformat() if hasattr(cd, "isoformat") else str(cd)[:10]
+        val = float(_coerce_number(row.get("DonorVisits")))
+        day_rows.append({"date": dk, "metric_value": int(round(val))})
+    day_rows.sort(key=lambda x: x["metric_value"], reverse=True)
+    cap = max(1, min(int(limit), 31))
+    periods = day_rows[:cap]
+
+    loc = resolve_location_reference(store_id)
+    tf = {"start": start_date, "end": end_date}
+    if timeframe_label:
+        tf["label"] = timeframe_label
+    tbl = _validated_door_count_object()
+    return {
+        "metric": "door_count",
+        "grain": "day",
+        "scope": "location",
+        "location_id": str(store_id),
+        "location_name": loc.get("LocationName") if loc else None,
+        "timeframe": tf,
+        "periods": periods,
+        "source": {
+            "name": tbl,
+            "grain": "daily",
+            "metric": "DonorVisits single store",
+            "date_range": f"{start_date} to {end_date}",
+            "filters": [f"single store: {loc.get('LocationName') if loc else store_id}"],
+        },
+    }
+
+
 def rank_door_count_days(
     start_date: str,
     end_date: str,
@@ -1099,23 +1197,45 @@ def rank_door_count_days(
     limit: int = 5,
     timeframe_label: Optional[str] = None,
 ) -> dict:
-    """Rank calendar days by total door count summed across scoped locations."""
+    """Rank calendar days by total door count summed across scoped locations (single SQL when possible)."""
     allowed_types, scope_key = _retail_scope_filter(scope)
-    locations = get_locations()
     tbl = _validated_door_count_object()
     by_day: Dict[str, float] = {}
-    if len(locations) <= 1:
-        for loc in locations:
-            _merge_numeric_day_maps(by_day, _door_count_days_fragment(loc, start_date, end_date, allowed_types))
+
+    all_ids = _collect_pcounter_ids_for_scope(scope)
+    if all_ids:
+        dcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_DATE, "SQL_DOOR_COUNT_COL_DATE")
+        vcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_VISITS, "SQL_DOOR_COUNT_COL_VISITS")
+        lcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_LOCATION, "SQL_DOOR_COUNT_COL_LOCATION")
+        ph = ",".join("?" * len(all_ids))
+        sql = f"""
+            SELECT CAST({dcol} AS DATE) AS CountDate, SUM({vcol}) AS DonorVisits
+            FROM {tbl}
+            WHERE {lcol} IN ({ph})
+              AND CAST({dcol} AS DATE) BETWEEN ? AND ?
+            GROUP BY CAST({dcol} AS DATE)
+        """
+        rows_agg = _execute_query(sql, tuple(all_ids) + (start_date, end_date))
+        for row in rows_agg:
+            cd = row.get("CountDate")
+            if cd is None:
+                continue
+            dk = cd.isoformat() if hasattr(cd, "isoformat") else str(cd)[:10]
+            by_day[dk] = float(_coerce_number(row.get("DonorVisits")))
     else:
-        workers = _sql_parallel_workers(len(locations))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            futs = [
-                pool.submit(_door_count_days_fragment, loc, start_date, end_date, allowed_types)
-                for loc in locations
-            ]
-            for fu in concurrent.futures.as_completed(futs):
-                _merge_numeric_day_maps(by_day, fu.result())
+        locations = get_locations()
+        if len(locations) <= 1:
+            for loc in locations:
+                _merge_numeric_day_maps(by_day, _door_count_days_fragment(loc, start_date, end_date, allowed_types))
+        else:
+            workers = _sql_parallel_workers(len(locations))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                futs = [
+                    pool.submit(_door_count_days_fragment, loc, start_date, end_date, allowed_types)
+                    for loc in locations
+                ]
+                for fu in concurrent.futures.as_completed(futs):
+                    _merge_numeric_day_maps(by_day, fu.result())
 
     cap = max(1, min(int(limit), 31))
     periods = sorted(
@@ -1160,6 +1280,19 @@ def _iterate_scoped_locations(scope: str) -> List[dict]:
     return out
 
 
+def _collect_pcounter_ids_for_scope(scope: str) -> List[int]:
+    """All PeopleCounter LocationIDs for retail locations in scope (for single set-based rollup)."""
+    seen = set()
+    for loc in _iterate_scoped_locations(scope):
+        lid = str(loc.get("LocationID", "") or "").strip()
+        for pid in _resolve_pcounter_location_ids(lid):
+            try:
+                seen.add(int(pid))
+            except (TypeError, ValueError):
+                continue
+    return sorted(seen)
+
+
 def _location_metric_total(
     location_id: str,
     metric: str,
@@ -1186,8 +1319,10 @@ def _location_metric_total(
             if r.get("ExpenseRatio") is not None
         ]
         return sum(vals) / len(vals) if vals else 0.0
-    use_current_month_source = _is_current_month_timeframe(start, end, current_day)
-    rows = get_financials(location_id, start, end, this_month=use_current_month_source)
+    # Revenue: sum daily core rows from TotalCoreTableFinal for the requested start/end dates.
+    # The get_financials flag is misnamed (`this_month`); False uses monthly financial summary only,
+    # which hides true daily grain and misaligns totals outside the server's current calendar month.
+    rows = get_financials(location_id, start, end, this_month=True)
     return _sum_field(rows, "NetRevenue")
 
 
@@ -1237,7 +1372,7 @@ def rank_store_revenue(
 
     rev_obj = _validated_this_month_revenue_object()
     month_obj = _validated_retail_monthly_financial_object()
-    if fn_metric == "revenue" and _is_current_month_timeframe(start_date, end_date, current_day):
+    if fn_metric == "revenue":
         primary_src = rev_obj
     elif fn_metric == "door_count":
         primary_src = _validated_door_count_object()

@@ -69,10 +69,15 @@ export const fetchDoorCount = (storeId, start, end) =>
 export const fetchTrends = (storeId, months = 12) =>
   api.get(`/trends/${encodeURIComponent(storeId)}`, { params: { months } });
 
-export const sendChatMessage = (message, storeContext, history) =>
+export const sendChatMessage = (message, storeContext, history, sessionState = null) =>
   api.post(
     '/chat',
-    { message, store_context: storeContext, conversation_history: history },
+    {
+      message,
+      store_context: storeContext,
+      conversation_history: history,
+      ...(sessionState && typeof sessionState === 'object' ? { session_state: sessionState } : {}),
+    },
     { timeout: CHAT_TIMEOUT_MS },
   );
 

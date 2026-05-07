@@ -4,7 +4,6 @@ flask-limiter==3.5.0
 flask-talisman==1.1.0
 marshmallow==3.20.0
 python-dotenv==1.0.0
-google-generativeai==0.7.0
 openai
 gunicorn==25.3.0
 # SQL Server. Pin Python ≤3.12 on Render (runtime.txt): pyodbc does not build on Python 3.14 yet.

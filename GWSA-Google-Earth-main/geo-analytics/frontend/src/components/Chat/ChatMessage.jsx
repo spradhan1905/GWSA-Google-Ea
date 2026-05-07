@@ -16,9 +16,10 @@ function renderMarkdown(text) {
   return sanitizeHtml(html);
 }
 
-export default function ChatMessage({ message }) {
+export default function ChatMessage({ message, onFollowupClick }) {
   const isAI = message.role === 'assistant';
   const [showSQL, setShowSQL] = useState(false);
+  const followups = Array.isArray(message.followups) ? message.followups : [];
 
   return (
     <div className={`flex gap-2.5 ${isAI ? '' : 'flex-row-reverse'}`}>
@@ -42,6 +43,21 @@ export default function ChatMessage({ message }) {
             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />
         ) : (
           <p className="text-sm leading-relaxed">{message.content}</p>
+        )}
+
+        {isAI && followups.length > 0 && onFollowupClick && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {followups.slice(0, 5).map((q, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => onFollowupClick(q)}
+                className="text-[10px] px-2 py-1 rounded-full border border-gwsa-border bg-gwsa-bg hover:bg-gwsa-surface-hover text-gwsa-text-secondary text-left max-w-full"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
         )}
 
         {/* Data action toggle */}

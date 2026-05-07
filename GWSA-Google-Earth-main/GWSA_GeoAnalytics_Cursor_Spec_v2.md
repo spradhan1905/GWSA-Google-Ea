@@ -8,7 +8,7 @@
 
 ## 🧭 What We're Building
 
-A full-stack internal web application that displays an interactive satellite map of all GWSA / Texas Thrift store locations, donation stations, and drop boxes across San Antonio and South Texas. Users click any location pin and see a live financial/operational dashboard panel for that location — powered by SQL Server data. A Gemini AI chat assistant is embedded in the app so users can ask questions in plain English.
+A full-stack internal web application that displays an interactive satellite map of all GWSA / Texas Thrift store locations, donation stations, and drop boxes across San Antonio and South Texas. Users click any location pin and see a live financial/operational dashboard panel for that location — powered by SQL Server data. An Azure OpenAI–backed chat assistant is embedded in the app so users can ask questions in plain English (proxied through Flask; keys stay on the server).
 
 ---
 
@@ -30,7 +30,7 @@ geo-analytics/
 │   │   │   │   ├── MetricSelector.jsx     # Toggle: Financials / Door Count / Trends
 │   │   │   │   └── DateRangePicker.jsx    # Period selector
 │   │   │   ├── Chat/
-│   │   │   │   ├── ChatDrawer.jsx         # Slide-up Gemini chat UI
+│   │   │   │   ├── ChatDrawer.jsx         # Slide-up AI chat UI
 │   │   │   │   ├── ChatMessage.jsx        # Individual message bubble
 │   │   │   │   └── ChatInput.jsx          # Input bar + send button
 │   │   │   └── Layout/
@@ -38,11 +38,10 @@ geo-analytics/
 │   │   │       └── LoadingSpinner.jsx
 │   │   ├── hooks/
 │   │   │   ├── useLocationData.js
-│   │   │   ├── useGeminiChat.js
+│   │   │   ├── useChat.js
 │   │   │   └── useKmlData.js
 │   │   ├── services/
 │   │   │   ├── api.js                     # Axios base + all backend calls
-│   │   │   └── gemini.js                  # Proxy-only — no API key in browser
 │   │   ├── data/
 │   │   │   └── stores.js                  # Parsed KML store list (static seed)
 │   │   ├── utils/
@@ -64,7 +63,7 @@ geo-analytics/
 │   │   ├── locations.py
 │   │   ├── financials.py
 │   │   ├── door_count.py
-│   │   └── chat.py            # POST /api/chat — Gemini proxy
+│   │   └── chat.py            # POST /api/chat — Azure OpenAI proxy
 │   ├── db/
 │   │   ├── connection.py      # SQL Server connection (pyodbc)
 │   │   └── queries.py         # Parameterized queries ONLY — never string concat
@@ -96,7 +95,7 @@ geo-analytics/
 | Security Headers | Flask-Talisman | CSP, HSTS, X-Frame-Options, nosniff |
 | Input Validation | marshmallow | Schema-based server-side validation |
 | Database | SQL Server via `pyodbc` | Parameterized queries only |
-| AI | Google Gemini `gemini-1.5-flash` | Server-side proxy only |
+| AI | Azure OpenAI (deployment from env) | Server-side proxy only; no key in browser |
 | XSS Sanitizer | DOMPurify | Sanitize AI responses before rendering |
 | Icons | Lucide React | |
 | Date Picker | React DatePicker | |

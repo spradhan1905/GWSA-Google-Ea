@@ -1,4 +1,4 @@
-"""Catalogs for planner, router, and response typing (GWSA AI model)."""
+"""Catalogs for planner, router, and response typing (GWSA AI model V2)."""
 
 INTENT_ACTIONS = frozenset({
     "none",
@@ -16,11 +16,49 @@ INTENT_ACTIONS = frozenset({
     "map_context_summary",
     "peak_store_daily_revenue",
     "unsupported",
+    "revenue_door_series",
+    "greeting",
+    "clarification_needed",
+})
+
+ALLOWED_PLAN_INTENTS = frozenset({
+    "location_summary",
+    "compare_locations",
+    "rank_locations",
+    "rank_time_periods",
+    "peak_store_daily_revenue",
+    "trend_summary",
+    "metric_breakdown",
+    "multi_metric_summary",
+    "compare_periods",
+    "correlation_check",
+    "derived_metric",
+    "revenue_door_series",
+    "data_catalog",
+    "map_context_summary",
+    "unsupported",
+    "greeting",
+    "clarification_needed",
+})
+
+CANONICAL_METRICS = frozenset({
+    "revenue",
+    "door_count",
+    "net_income",
+    "operating_expenses",
+    "personnel_expenses",
+    "expense_ratio",
+    "revenue_per_visit",
 })
 
 INTENT_METRICS = frozenset({
-    "revenue", "door_count", "net_income", "operating_expenses",
-    "personnel_expenses", "expense_ratio",
+    "revenue",
+    "door_count",
+    "net_income",
+    "operating_expenses",
+    "personnel_expenses",
+    "expense_ratio",
+    "revenue_per_visit",
 })
 
 RANK_HINTS = ("highest", "best", "top", "most", "lowest", "least")
@@ -40,4 +78,25 @@ MONTH_NAMES = {
     "october": 10, "oct": 10,
     "november": 11, "nov": 11,
     "december": 12, "dec": 12,
+}
+
+# Maps planner intent -> analytics_actions action label (execute_approved_action)
+INTENT_TO_ACTION = {
+    "location_summary": "location_summary",
+    "compare_locations": "compare_locations",
+    "rank_locations": "rank_locations",
+    "rank_time_periods": "rank_time_periods",
+    "peak_store_daily_revenue": "peak_store_daily_revenue",
+    "trend_summary": "trend_summary",
+    "metric_breakdown": "metric_breakdown",
+    "multi_metric_summary": "multi_metric_summary",
+    "compare_periods": "compare_periods",
+    "correlation_check": "correlation_check",
+    "derived_metric": "revenue_per_visit_rank",
+    "revenue_door_series": "revenue_door_series",
+    "data_catalog": "data_catalog",
+    "map_context_summary": "map_context_summary",
+    "unsupported": "none",
+    "greeting": "none",
+    "clarification_needed": "none",
 }

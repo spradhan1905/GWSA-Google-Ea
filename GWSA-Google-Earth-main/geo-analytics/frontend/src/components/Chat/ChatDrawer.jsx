@@ -15,6 +15,7 @@ const WELCOME_MESSAGE = {
 
 export default function ChatDrawer({ open, onClose, storeContext }) {
   const [messages, setMessages] = useState([WELCOME_MESSAGE]);
+  const [sessionState, setSessionState] = useState(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef(null);
@@ -38,13 +39,19 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
         role: m.role,
         content: m.content,
       }));
-      const res = await sendChatMessage(text, storeContext, history);
+      const res = await sendChatMessage(text, storeContext, history, sessionState);
       const data = res.data;
+      if (data.session_state) {
+        setSessionState(data.session_state);
+      }
       const aiMsg = {
         role: 'assistant',
         content: data.reply || 'I couldn\'t generate a response. Please try again.',
         sqlUsed: data.sql_used,
         queryData: data.data,
+        followups: data.followups,
+        responseType: data.response_type,
+        chart: data.chart,
       };
       setMessages(prev => [...prev, aiMsg]);
     } catch (err) {
@@ -70,7 +77,7 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
     } finally {
       setLoading(false);
     }
-  }, [loading, messages, storeContext]);
+  }, [loading, messages, storeContext, sessionState]);
 
   if (!open) return null;
 
@@ -110,7 +117,7 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
           {messages.map((msg, i) => (
-            <ChatMessage key={i} message={msg} />
+            <ChatMessage key={i} message={msg} onFollowupClick={handleSend} />
           ))}
           {loading && (
             <div className="flex items-center gap-2 px-3 py-2">

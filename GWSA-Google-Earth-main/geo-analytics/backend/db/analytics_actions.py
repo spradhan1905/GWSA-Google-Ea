@@ -1,28 +1,74 @@
 """Approved, parameterized analytics retrievals safe for chat (no dynamic SQL)."""
-from typing import Optional, Tuple, Any
-
 from datetime import date
+from typing import Any, Optional, Tuple
+
+from ai.planner_heuristic import (
+    detect_metric,
+    match_store_names,
+    parse_timeframe,
+    wants_rank_time_periods,
+    wants_store_best_day,
+)
 
 from db.queries import (
+    _sum_field,
     build_data_catalog,
     compare_locations,
     compare_period_totals,
     donor_map_summary,
     get_door_count,
+    get_financials,
+    get_location_catalog,
     get_location_summary,
     get_revenue_door_count_series,
     multi_metric_snapshot,
     network_correlation_revenue_door,
     peak_store_daily_revenue,
     rank_door_count_days,
+    rank_door_count_days_for_store,
     rank_locations,
     rank_revenue_days,
+    rank_revenue_days_for_store,
     rank_store_revenue,
     resolve_location_reference,
     revenue_per_visit_by_store,
     trend_summary_for_chat,
-    _sum_field,
 )
+
+
+def coerce_plan_for_daily_peak_questions(plan: dict, user_message: Optional[str]) -> dict:
+    """
+    Final safety net: questions that clearly ask for a calendar day / date peak must not run
+    rank_locations (monthly-style totals per store).
+
+    Older planner builds or stale deployments may still emit rank_locations; fix at execution time.
+    """
+    if not isinstance(plan, dict) or not user_message or not str(user_message).strip():
+        return plan
+    text = str(user_message).strip()
+    if not (wants_rank_time_periods(text) or wants_store_best_day(text)):
+        return plan
+    if plan.get("action") not in ("rank_locations", "rank_time_periods", "none") and plan.get(
+        "intent"
+    ) != "rank_time_periods":
+        # Avoid stomping compares, peaks, summaries, or other specialized actions.
+        return plan
+    p = dict(plan)
+    tf = p.get("timeframe")
+    if not isinstance(tf, dict) or not tf.get("start"):
+        tf = parse_timeframe(text)
+    if not isinstance(tf, dict) or not tf.get("start"):
+        return plan
+    p["intent"] = "rank_time_periods"
+    p["action"] = "rank_time_periods"
+    p["grain"] = "day"
+    p["timeframe"] = tf
+    dm = detect_metric(text)
+    if dm:
+        p["metric"] = dm
+    if not (p.get("store_names") or []):
+        p["store_names"] = match_store_names(text, get_location_catalog(limit=80))[:2]
+    return p
 
 
 def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[str], Any]:
@@ -54,17 +100,23 @@ def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[st
                     rows = get_door_count(location_id, timeframe["start"], timeframe["end"])
                     metrics = {"door_count": int(round(_sum_field(rows, "DonorVisits")))}
                 else:
-                    rows = get_financials(location_id, timeframe["start"], timeframe["end"])
+                    # Daily core revenue from TotalCoreTableFinal (not monthly financial rollup).
+                    rows = get_financials(
+                        location_id, timeframe["start"], timeframe["end"], this_month=True
+                    )
                     metrics = {"revenue": _sum_field(rows, "NetRevenue")}
                 data = {
                     "location_id": location_id,
                     "location_name": location.get("LocationName"),
                     "location_type": location.get("LocationType"),
                     "metric": metric,
+                    "grain": "day",
                     "timeframe": timeframe,
                     "metrics": metrics,
                     "rows": rows,
                 }
+                if metric == "revenue":
+                    data["revenue_grain"] = "daily_core"
                 selected_action = f"location_summary:{metric}"
         elif target_ref:
             data = get_location_summary(target_ref)
@@ -96,24 +148,58 @@ def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[st
         if timeframe:
             scope_arg = plan.get("scope") or "all_retail_stores"
             label = timeframe.get("label")
+            names = plan.get("store_names") or []
+            single_id: Optional[str] = None
+            if len(names) == 1:
+                loc_one = resolve_location_reference(names[0])
+                if loc_one:
+                    single_id = str(loc_one["LocationID"])
+            elif plan.get("use_viewing_store") and viewing_location:
+                single_id = str(viewing_location["LocationID"])
+            elif plan.get("trend_store_ref"):
+                loc_tr = resolve_location_reference(plan["trend_store_ref"])
+                if loc_tr:
+                    single_id = str(loc_tr["LocationID"])
+
+            use_network = len(names) > 1 or not single_id
+
             if metric == "door_count":
-                data = rank_door_count_days(
-                    timeframe["start"],
-                    timeframe["end"],
-                    scope=scope_arg,
-                    limit=plan["limit"],
-                    timeframe_label=label,
-                )
+                if not use_network and single_id:
+                    data = rank_door_count_days_for_store(
+                        single_id,
+                        timeframe["start"],
+                        timeframe["end"],
+                        limit=plan["limit"],
+                        timeframe_label=label,
+                    )
+                else:
+                    data = rank_door_count_days(
+                        timeframe["start"],
+                        timeframe["end"],
+                        scope=scope_arg,
+                        limit=plan["limit"],
+                        timeframe_label=label,
+                    )
             else:
-                data = rank_revenue_days(
-                    timeframe["start"],
-                    timeframe["end"],
-                    scope=scope_arg,
-                    limit=plan["limit"],
-                    timeframe_label=label,
-                )
+                if not use_network and single_id:
+                    data = rank_revenue_days_for_store(
+                        single_id,
+                        timeframe["start"],
+                        timeframe["end"],
+                        limit=plan["limit"],
+                        timeframe_label=label,
+                    )
+                else:
+                    data = rank_revenue_days(
+                        timeframe["start"],
+                        timeframe["end"],
+                        scope=scope_arg,
+                        limit=plan["limit"],
+                        timeframe_label=label,
+                    )
             if data is not None:
-                selected_action = f"rank_periods:{metric}:day"
+                tag = ":store" if (not use_network and single_id) else ""
+                selected_action = f"rank_periods:{metric}:day{tag}"
 
     elif action == "rank_locations":
         data = rank_locations(metric, plan["limit"], timeframe=timeframe)

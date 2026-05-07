@@ -81,7 +81,7 @@ def create_app():
         return jsonify({
             "status": "ok",
             "data_source": "sql",
-            "ai_provider": "azure_openai" if Config.AZURE_OPENAI_API_KEY else "gemini" if Config.GEMINI_API_KEY else "demo",
+            "ai_provider": "azure_openai" if Config.AZURE_OPENAI_API_KEY else "demo",
             "azure_openai_configured": bool(
                 Config.AZURE_OPENAI_ENDPOINT
                 and Config.AZURE_OPENAI_API_KEY
@@ -98,7 +98,6 @@ def create_app():
             "sql_sales_unit_name_flexible": Config.SQL_SALES_UNIT_NAME_FLEXIBLE,
             "sql_locations_minimal_join": Config.SQL_LOCATIONS_MINIMAL_JOIN,
             "locations_source": Config.LOCATIONS_SOURCE,
-            "gemini_configured": bool(Config.GEMINI_API_KEY),
         })
 
     return app

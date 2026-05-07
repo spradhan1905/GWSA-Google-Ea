@@ -1,4 +1,6 @@
 """Standard chat API payloads: success branches, data gaps, provider errors."""
+from typing import Optional
+
 from flask import jsonify
 
 from ai.context import data_gap_code, sources_from_payload
@@ -291,11 +293,39 @@ def demo_reply(message: str, store_context: str = None) -> str:
     )
 
 
-def chat_success_payload(reply: str, plan: dict, data_action: str, analytics_data: dict) -> dict:
-    """Normalize JSON body for a successful completion."""
-    body = {"reply": reply, "sql_used": data_action, "data": analytics_data}
+def chat_success_payload(
+    reply: str,
+    plan: dict,
+    data_action: str,
+    analytics_data: dict,
+    *,
+    session_payload: Optional[dict] = None,
+    followups: Optional[list] = None,
+    chart: Optional[dict] = None,
+    response_type: str = "answer",
+    plan_used: Optional[dict] = None,
+) -> dict:
+    """Normalize JSON body for a successful completion (V2 envelope)."""
+    body: dict = {
+        "reply": reply,
+        "response_type": response_type,
+        "sql_used": data_action,
+        "data": analytics_data,
+        "data_action": (data_action or "").split(":")[0] if data_action else None,
+    }
     body["sources"] = sources_from_payload(analytics_data)
     dg = data_gap_code(plan, data_action or "", analytics_data or {})
     if dg:
         body["data_gap"] = dg
+    if session_payload is not None:
+        body["session_state"] = session_payload
+    if followups:
+        body["followups"] = followups
+    if chart:
+        body["chart"] = chart
+    if plan_used:
+        body["plan_used"] = plan_used
+    conf = plan.get("plan_confidence")
+    if conf:
+        body["confidence"] = conf
     return body

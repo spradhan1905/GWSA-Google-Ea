@@ -34,6 +34,7 @@ class ChatRequestSchema(Schema):
     message              = fields.Str(required=True, validate=validate.Length(min=1, max=2000))
     store_context        = fields.Str(load_default=None, validate=validate.Length(max=50))
     conversation_history = fields.List(fields.Dict(), load_default=[], validate=validate.Length(max=20))
+    session_state        = fields.Dict(load_default=None)
 
 # ─── Store ID Validation ───────────────────────────────────
 def validate_store_id(store_id: str) -> bool:

@@ -2,7 +2,7 @@
 
 **Goodwill Industries of San Antonio** — Interactive Geospatial Analytics Platform
 
-A full-stack internal web application that displays an interactive satellite map of all GWSA / Texas Thrift store locations, donation stations, and drop boxes across San Antonio and South Texas. Click any location pin to see a live financial/operational dashboard, powered by SQL Server data and a Gemini AI assistant.
+A full-stack internal web application that displays an interactive satellite map of all GWSA / Texas Thrift store locations, donation stations, and drop boxes across San Antonio and South Texas. Click any location pin to see a live financial/operational dashboard, powered by SQL Server data and an Azure OpenAI assistant (via the Flask backend).
 
 ---
 
@@ -38,7 +38,7 @@ npm run dev                    # http://localhost:5173
 | Key | Where to Get It | File |
 |-----|----------------|------|
 | `VITE_GOOGLE_MAPS_API_KEY` | [Google Cloud Console](https://console.cloud.google.com) → Maps JS API | `frontend/.env.local` |
-| `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com) | `backend/.env` |
+| Azure OpenAI (`AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, …) | Azure Portal → Azure OpenAI | `backend/.env` |
 | SQL Server credentials | GWSA IT / Azure Portal | `backend/.env` |
 
 ---
@@ -48,7 +48,7 @@ npm run dev                    # http://localhost:5173
 ```
 frontend/ (React + Vite + Tailwind)    →  backend/ (Python Flask)    →  SQL Server
                                            ↓
-                                      Google Gemini API
+                                      Azure OpenAI
 ```
 
 ## 📦 Tech Stack
@@ -60,7 +60,7 @@ frontend/ (React + Vite + Tailwind)    →  backend/ (Python Flask)    →  SQL 
 | Charts | Recharts |
 | Backend | Python Flask, Flask-CORS, Flask-Limiter |
 | Database | SQL Server (pyodbc) |
-| AI | Google Gemini 1.5 Flash |
+| AI | Azure OpenAI |
 | Security | Flask-Talisman, DOMPurify, marshmallow |
 
 ## 🔒 Security
@@ -86,4 +86,4 @@ frontend/ (React + Vite + Tailwind)    →  backend/ (Python Flask)    →  SQL 
 
 ---
 
-*Built for Goodwill Industries of San Antonio · Stack: React + Flask + Google Maps + Gemini AI + SQL Server*
+*Built for Goodwill Industries of San Antonio · Stack: React + Flask + Google Maps + Azure OpenAI + SQL Server*

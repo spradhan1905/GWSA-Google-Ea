@@ -1,4 +1,97 @@
-"""Evidence helpers: source metadata and data-gap signals."""
+"""Evidence helpers: source metadata, trimming, data-gap signals, chart hints."""
+
+from typing import Optional
+
+_MAX_EVIDENCE_SERIES_POINTS = 120
+
+
+def trim_evidence(data: dict) -> dict:
+    """Trim bulky list fields for LLM prompts (same contract as legacy composer helper)."""
+    if not isinstance(data, dict):
+        return data
+    out = dict(data)
+    series = out.get("series")
+    if isinstance(series, list) and len(series) > _MAX_EVIDENCE_SERIES_POINTS:
+        out["series"] = series[:_MAX_EVIDENCE_SERIES_POINTS]
+        out["_series_truncated_note"] = (
+            f"Only the first {_MAX_EVIDENCE_SERIES_POINTS} calendar points are shown."
+        )
+    locs = out.get("locations")
+    if isinstance(locs, list) and len(locs) > 40:
+        out["locations"] = locs[:40]
+        out["_locations_truncated_note"] = "Top 40 rows shown."
+    periods = out.get("periods")
+    if isinstance(periods, list) and len(periods) > 40:
+        out["periods"] = periods[:40]
+    return out
+
+
+def chart_rows_for_payload(intent: str, analytics_data: dict) -> list:
+    """Select row keys for chart envelope from structured analytics payloads."""
+    if not isinstance(analytics_data, dict):
+        return []
+    if intent in {"rank_locations", "metric_breakdown", "derived_metric"}:
+        return list(analytics_data.get("locations") or [])[:50]
+    if intent in {"rank_time_periods"}:
+        return list(analytics_data.get("periods") or [])[:50]
+    if intent == "peak_store_daily_revenue":
+        rows = analytics_data.get("top_store_days") or []
+        if rows:
+            return rows[:50]
+        leader = analytics_data.get("leader")
+        return [leader] if leader else []
+    if intent == "trend_summary":
+        return list(analytics_data.get("rows") or [])[:60]
+    if intent == "compare_locations":
+        return list(analytics_data.get("locations") or [])[:20]
+    if intent == "compare_periods":
+        pa = analytics_data.get("period_a") or {}
+        pb = analytics_data.get("period_b") or {}
+        return [
+            {"label": pa.get("label", "A"), "value": pa.get("value")},
+            {"label": pb.get("label", "B"), "value": pb.get("value")},
+        ]
+    if intent == "correlation_check":
+        return [
+            {
+                "network_revenue": analytics_data.get("network_daily_revenue_series", []) and 1,
+                "note": "scatter built client-side from series when present",
+            }
+        ]
+    if intent == "revenue_door_series":
+        return list(analytics_data.get("series") or [])[:90]
+    return []
+
+
+def build_chart_envelope(intent: str, plan: dict, analytics_data: Optional[dict]) -> Optional[dict]:
+    """Optional chart object for the API response."""
+    if not plan.get("requires_chart") and intent not in {
+        "rank_locations",
+        "rank_time_periods",
+        "compare_locations",
+        "compare_periods",
+        "trend_summary",
+    }:
+        return None
+    from ai.followups import chart_config_for_intent
+
+    cfg = chart_config_for_intent(intent, plan.get("metric") or "revenue")
+    if not cfg or not analytics_data:
+        return None
+    rows = chart_rows_for_payload(intent, analytics_data)
+    if not rows:
+        return None
+    metric = str(plan.get("metric") or "metric").replace("_", " ").title()
+    tf = (analytics_data.get("timeframe") or plan.get("timeframe") or {}) if isinstance(analytics_data, dict) else {}
+    label = str(tf.get("label") or "")
+    title_parts = [metric, intent.replace("_", " ").title()]
+    if label:
+        title_parts.append(label)
+    return {
+        **cfg,
+        "title": " — ".join(title_parts),
+        "rows": rows,
+    }
 
 
 def sources_from_payload(analytics_data: dict) -> list:

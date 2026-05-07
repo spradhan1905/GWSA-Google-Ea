@@ -77,12 +77,18 @@ class Config:
     except ValueError:
         AI_COMPLETION_TIMEOUT_SEC = 165.0
     AI_COMPLETION_TIMEOUT_SEC = max(30.0, min(AI_COMPLETION_TIMEOUT_SEC, 600.0))
+    try:
+        AI_PLANNER_TIMEOUT_SEC = float((os.environ.get('AI_PLANNER_TIMEOUT_SEC') or '3').strip())
+    except ValueError:
+        AI_PLANNER_TIMEOUT_SEC = 3.0
+    AI_PLANNER_TIMEOUT_SEC = max(1.0, min(AI_PLANNER_TIMEOUT_SEC, 30.0))
+    try:
+        AI_COMPOSER_TIMEOUT_SEC = float((os.environ.get('AI_COMPOSER_TIMEOUT_SEC') or '8').strip())
+    except ValueError:
+        AI_COMPOSER_TIMEOUT_SEC = 8.0
+    AI_COMPOSER_TIMEOUT_SEC = max(3.0, min(AI_COMPOSER_TIMEOUT_SEC, 120.0))
 
-    # Gemini AI (legacy fallback for older local environments)
-    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-    GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash').strip()
-
-    # Flask
+    # Azure OpenAI only (chat assistant)
     SECRET_KEY  = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-change-in-production')
     CORS_ORIGIN = os.environ.get('CORS_ORIGIN', 'http://localhost:5173')
     CORS_ORIGINS = [
