@@ -2,7 +2,7 @@
  * GWSA GeoAnalytics — Side Panel
  * Slide-in dashboard panel with financial/operational tabs.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   ChevronLeft,
@@ -14,6 +14,7 @@ import {
   Phone,
   Users,
   Gift,
+  GripVertical,
 } from 'lucide-react';
 import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
 import { STORE_OPS_INFO_BY_ID } from '../../data/storeOpsInfo';
@@ -36,6 +37,11 @@ const TABS = [
 ];
 const KPI_TAB_IDS = new Set(['financials', 'donations', 'doorcount', 'trends']);
 const CONSOLIDATED_ONLY_PRESETS = ['Rolling 3 months', 'YTD', '12 Months'];
+
+// Desktop panel resize (drag the left-edge handle to stretch the panel width).
+const DEFAULT_PANEL_WIDTH = 440;
+const MIN_PANEL_WIDTH = 360;
+const DESKTOP_MEDIA_QUERY = '(min-width: 640px)';
 
 function monthSpanInclusive(startIso, endIso) {
   if (!startIso || !endIso) return 12;
@@ -81,6 +87,11 @@ export default function SidePanel({ location, open, onClose }) {
   const [donations, setDonations] = useState([]);
   const [donationsError, setDonationsError] = useState(null);
   const [trends, setTrends] = useState([]);
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(DESKTOP_MEDIA_QUERY).matches,
+  );
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const resizeRef = useRef({ active: false, startX: 0, startWidth: DEFAULT_PANEL_WIDTH });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const isConsolidated = String(location?.id || '').toUpperCase() === 'CONSOLIDATED';
@@ -92,6 +103,50 @@ export default function SidePanel({ location, open, onClose }) {
     if (tab.id === 'info' && (!isInfoEligible || !storeOpsInfo)) return false;
     return true;
   });
+
+  // Track desktop vs mobile so panel resize is only active on larger screens.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const onChange = (e) => setIsDesktop(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // Left-edge resize handle: hold and drag to stretch the panel width (desktop only).
+  const handleResizeMove = useCallback((e) => {
+    const st = resizeRef.current;
+    if (!st.active) return;
+    const delta = st.startX - e.clientX; // drag left → wider
+    const maxWidth = Math.min(window.innerWidth - 60, 1100);
+    const next = Math.max(MIN_PANEL_WIDTH, Math.min(st.startWidth + delta, maxWidth));
+    setPanelWidth(next);
+  }, []);
+
+  const handleResizeEnd = useCallback(() => {
+    resizeRef.current.active = false;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    window.removeEventListener('pointermove', handleResizeMove);
+    window.removeEventListener('pointerup', handleResizeEnd);
+  }, [handleResizeMove]);
+
+  const handleResizeStart = useCallback((e) => {
+    if (e.pointerType === 'touch') return; // mobile keeps full-width layout
+    e.preventDefault();
+    resizeRef.current = { active: true, startX: e.clientX, startWidth: panelWidth };
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('pointermove', handleResizeMove);
+    window.addEventListener('pointerup', handleResizeEnd);
+  }, [panelWidth, handleResizeMove, handleResizeEnd]);
+
+  useEffect(() => () => {
+    window.removeEventListener('pointermove', handleResizeMove);
+    window.removeEventListener('pointerup', handleResizeEnd);
+  }, [handleResizeMove, handleResizeEnd]);
+
+  const handleResetWidth = useCallback(() => setPanelWidth(DEFAULT_PANEL_WIDTH), []);
 
   // Default range/preset whenever the user picks a location.
   useEffect(() => {
@@ -245,9 +300,29 @@ export default function SidePanel({ location, open, onClose }) {
     : {};
 
   return (
-    <div className={`absolute top-0 right-0 h-full w-full sm:w-[440px] z-40 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-      open ? 'translate-x-0' : 'translate-x-full'
-    }`}>
+    <div
+      className={`absolute top-0 right-0 h-full w-full sm:w-[440px] z-40 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        open ? 'translate-x-0' : 'translate-x-full'
+      }`}
+      style={isDesktop ? { width: `${panelWidth}px` } : undefined}
+    >
+      {/* Left-edge resize handle (desktop only): hold and drag to stretch the panel. */}
+      {isDesktop && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panel"
+          onPointerDown={handleResizeStart}
+          onDoubleClick={handleResetWidth}
+          title="Drag to resize · double-click to reset"
+          className="group absolute left-0 top-0 h-full w-2 -translate-x-1/2 z-50 cursor-col-resize flex items-center justify-center"
+        >
+          <div className="h-14 w-1.5 rounded-full bg-gwsa-border group-hover:bg-gwsa-accent transition-colors" />
+          <div className="absolute flex items-center justify-center w-5 h-9 rounded-md bg-gwsa-surface border border-gwsa-border shadow-panel opacity-0 group-hover:opacity-100 transition-opacity">
+            <GripVertical className="w-3.5 h-3.5 text-gwsa-text-muted" />
+          </div>
+        </div>
+      )}
       <div className="h-full bg-gwsa-surface/95 backdrop-blur-xl border-l border-gwsa-border shadow-panel flex flex-col overflow-hidden">
 
         {/* Header */}
