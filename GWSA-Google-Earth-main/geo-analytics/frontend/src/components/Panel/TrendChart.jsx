@@ -33,7 +33,7 @@ const makeAxisFormatter = (granularity) => (dateStr) => {
 const formatTooltipValue = (value, name) => {
   if (typeof value !== 'number') return ['—', name];
   if (name.includes('Ratio')) return [`${(value * 100).toFixed(1)}%`, name];
-  if (name.includes('Visits') || name.includes('Door')) return [value.toLocaleString(), name];
+  if (name.includes('Visits') || name.includes('Door') || name.includes('Donation')) return [value.toLocaleString(), name];
   if (value > 1000) return [`$${value.toLocaleString()}`, name];
   return [value.toLocaleString(), name];
 };
@@ -41,7 +41,7 @@ const formatTooltipValue = (value, name) => {
 const getMetricUnit = (line) => {
   const name = `${line.name || ''} ${line.key || ''}`;
   if (/ratio|percent|margin/i.test(name)) return 'ratio';
-  if (/door|visit|count/i.test(name)) return 'count';
+  if (/door|visit|count|donation/i.test(name)) return 'count';
   if (/revenue|income|expense|sales|cost|profit/i.test(name)) return 'currency';
   return 'value';
 };
@@ -188,8 +188,8 @@ function ChartBody({
           {lines.length > 1 && (
             <Legend
               iconType="circle"
-              iconSize={6}
-              wrapperStyle={{ fontSize: '10px', color: '#94A3B8', paddingTop: '8px' }}
+              iconSize={12}
+              wrapperStyle={{ fontSize: '12px', fontWeight: 500, color: '#CBD5E1', paddingTop: '10px' }}
             />
           )}
           {linesWithAxes.map((line) => (
@@ -213,6 +213,7 @@ function ChartBody({
                 yAxisId={line.yAxisId}
                 stroke={line.color}
                 strokeWidth={2}
+                strokeDasharray={line.dashed ? '5 4' : undefined}
                 dot={false}
                 activeDot={{ r: 4, fill: line.color, stroke: '#0B0F1A', strokeWidth: 2 }}
               />

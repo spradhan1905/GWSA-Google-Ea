@@ -13,6 +13,7 @@ import {
   User,
   Phone,
   Users,
+  Gift,
 } from 'lucide-react';
 import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
 import { STORE_OPS_INFO_BY_ID } from '../../data/storeOpsInfo';
@@ -21,18 +22,19 @@ import TrendChart from './TrendChart';
 import DateRangePicker from './DateRangePicker';
 import MetricSelector from './MetricSelector';
 import LoadingSpinner from '../Layout/LoadingSpinner';
-import { fetchFinancials, fetchDoorCount, fetchTrends } from '../../services/api';
+import { fetchFinancials, fetchDoorCount, fetchTrends, fetchBudgetVsActual, fetchDonations } from '../../services/api';
 import { formatCurrency, formatPercent, formatNumber, getChangeIndicator } from '../../utils/formatters';
 import { localDateISO, calendarDaysInclusive, formatDateShort } from '../../utils/dateUtils';
 import { FEATURES } from '../../config/features';
 
 const TABS = [
   { id: 'financials', label: 'Financials', icon: TrendingUp },
+  { id: 'donations', label: 'Donations', icon: Gift },
   { id: 'doorcount', label: 'Door Count', icon: DoorOpen },
   { id: 'trends', label: 'Trends', icon: BarChart3 },
   { id: 'info', label: 'Info', icon: User },
 ];
-const KPI_TAB_IDS = new Set(['financials', 'doorcount', 'trends']);
+const KPI_TAB_IDS = new Set(['financials', 'donations', 'doorcount', 'trends']);
 const CONSOLIDATED_ONLY_PRESETS = ['Rolling 3 months', 'YTD', '12 Months'];
 
 function monthSpanInclusive(startIso, endIso) {
@@ -73,8 +75,11 @@ export default function SidePanel({ location, open, onClose }) {
   /** Drives API: This Month + Custom → TotalCoreTableFinal; Rolling 3 months/YTD/12 Months → RetailStoreMonthlyFinancialSummary. */
   const [financialsPreset, setFinancialsPreset] = useState('This Month');
   const [financials, setFinancials] = useState([]);
+  const [budgetVsActual, setBudgetVsActual] = useState([]);
   const [doorCount, setDoorCount] = useState([]);
   const [doorCountError, setDoorCountError] = useState(null);
+  const [donations, setDonations] = useState([]);
+  const [donationsError, setDonationsError] = useState(null);
   const [trends, setTrends] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -105,15 +110,19 @@ export default function SidePanel({ location, open, onClose }) {
     if (!location?.id || !dateRange.start || !dateRange.end) return;
     if (!FEATURES.kpis) {
       setFinancials([]);
+      setBudgetVsActual([]);
       setDoorCount([]);
+      setDonations([]);
       setTrends([]);
       setLoading(false);
       setError(null);
       setDoorCountError(null);
+      setDonationsError(null);
       return;
     }
     setError(null);
     setDoorCountError(null);
+    setDonationsError(null);
 
     const loadData = async () => {
       setLoading(true);
@@ -127,7 +136,10 @@ export default function SidePanel({ location, open, onClose }) {
               : financialsPreset === 'YTD'
                 ? rangeMonths
                 : 12;
-        const [finRes, dcRes, trRes] = await Promise.allSettled([
+        const usesDailyGrain =
+          !isConsolidated && (financialsPreset === 'This Month' || financialsPreset === 'Custom');
+        const budgetGrain = usesDailyGrain ? 'day' : 'month';
+        const [finRes, dcRes, trRes, bvaRes, dnRes] = await Promise.allSettled([
           fetchFinancials(location.id, dateRange.start, dateRange.end, {
             thisMonth:
               !isConsolidated && (financialsPreset === 'This Month' || financialsPreset === 'Custom'),
@@ -136,8 +148,28 @@ export default function SidePanel({ location, open, onClose }) {
             ? Promise.resolve({ data: [] })
             : fetchDoorCount(location.id, dateRange.start, dateRange.end),
           fetchTrends(location.id, trendMonths),
+          fetchBudgetVsActual(location.id, dateRange.start, dateRange.end, { grain: budgetGrain }),
+          fetchDonations(location.id, dateRange.start, dateRange.end),
         ]);
         if (finRes.status === 'fulfilled') setFinancials(finRes.value.data || []);
+        if (bvaRes.status === 'fulfilled') {
+          setBudgetVsActual(Array.isArray(bvaRes.value.data) ? bvaRes.value.data : []);
+        } else {
+          setBudgetVsActual([]);
+        }
+        if (dnRes.status === 'fulfilled') {
+          const payload = dnRes.value.data;
+          setDonations(Array.isArray(payload) ? payload : []);
+        } else {
+          setDonations([]);
+          const err = dnRes.reason;
+          const detail =
+            err?.response?.data?.error ??
+            (typeof err?.response?.data === 'string' ? err.response.data : null);
+          setDonationsError(
+            detail || err?.message || 'Could not load donations. Check SQL / tbl_Donation.',
+          );
+        }
         if (dcRes.status === 'fulfilled') {
           const payload = dcRes.value.data;
           setDoorCount(Array.isArray(payload) ? payload : []);
@@ -196,6 +228,21 @@ export default function SidePanel({ location, open, onClose }) {
     doorCalendarDays > 0 ? Math.round(totalVisits / doorCalendarDays) : 0;
   const peakDay = doorCount.reduce((max, d) =>
     (d.DonorVisits || 0) > (max.DonorVisits || 0) ? d : max, {});
+  const lowestDoorDay = doorCount.length
+    ? doorCount.reduce((min, d) =>
+        (d.DonorVisits ?? Infinity) < (min.DonorVisits ?? Infinity) ? d : min)
+    : {};
+
+  // Donations KPIs — SUM(DonationAmt) per day from tbl_Donation (same presets as Financials/Door Count).
+  const totalDonations = donations.reduce((s, d) => s + (d.Donations || 0), 0);
+  const donationAvgDaily =
+    doorCalendarDays > 0 ? Math.round(totalDonations / doorCalendarDays) : 0;
+  const donationPeakDay = donations.reduce((max, d) =>
+    (d.Donations || 0) > (max.Donations || 0) ? d : max, {});
+  const donationLowestDay = donations.length
+    ? donations.reduce((min, d) =>
+        (d.Donations ?? Infinity) < (min.Donations ?? Infinity) ? d : min)
+    : {};
 
   return (
     <div className={`absolute top-0 right-0 h-full w-full sm:w-[440px] z-40 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
@@ -289,6 +336,7 @@ export default function SidePanel({ location, open, onClose }) {
                 <FinancialsTab
                   location={location}
                   data={financials}
+                  budgetVsActual={budgetVsActual}
                   totalRevenue={totalRevenue}
                   financialsPreset={financialsPreset}
                   usesTotalCoreDaily={usesTotalCoreDaily}
@@ -298,12 +346,27 @@ export default function SidePanel({ location, open, onClose }) {
                   incomeChange={incomeChange}
                 />
               )}
+              {activeTab === 'donations' && (
+                <DonationsTab
+                  data={donations}
+                  totalDonations={totalDonations}
+                  avgDaily={donationAvgDaily}
+                  peakDay={donationPeakDay}
+                  lowestDay={donationLowestDay}
+                  preset={financialsPreset}
+                  rangeStart={dateRange.start}
+                  rangeEnd={dateRange.end}
+                  calendarDays={doorCalendarDays}
+                  loadError={donationsError}
+                />
+              )}
               {activeTab === 'doorcount' && (
                 <DoorCountTab
                   data={doorCount}
                   totalVisits={totalVisits}
                   avgDaily={avgDaily}
                   peakDay={peakDay}
+                  lowestDay={lowestDoorDay}
                   preset={financialsPreset}
                   rangeStart={dateRange.start}
                   rangeEnd={dateRange.end}
@@ -317,6 +380,7 @@ export default function SidePanel({ location, open, onClose }) {
                   preset={financialsPreset}
                   financialsData={financials}
                   doorCountData={doorCount}
+                  donationsData={donations}
                   includeDoorCount={!isConsolidated}
                 />
               )}
@@ -334,6 +398,7 @@ export default function SidePanel({ location, open, onClose }) {
 function FinancialsTab({
   location,
   data,
+  budgetVsActual,
   totalRevenue,
   financialsPreset,
   usesTotalCoreDaily,
@@ -344,6 +409,7 @@ function FinancialsTab({
 }) {
   const isRetail = location?.type === 'store';
   const isThisMonth = financialsPreset === 'This Month';
+  const budgetGranularity = usesTotalCoreDaily ? 'day' : 'month';
 
   // This Month / custom range: daily Core Sales revenue from TotalCoreTableFinal.
   if (usesTotalCoreDaily) {
@@ -378,6 +444,7 @@ function FinancialsTab({
             dateAxisGranularity="day"
           />
         )}
+        <BudgetVsActualChart data={budgetVsActual} granularity={budgetGranularity} />
       </div>
     );
   }
@@ -405,6 +472,144 @@ function FinancialsTab({
           ]}
         />
       )}
+      <BudgetVsActualChart data={budgetVsActual} granularity={budgetGranularity} />
+    </div>
+  );
+}
+
+/**
+ * Actual vs Budget Core revenue (DailyCoreRevenueBudgetVsActual_NoSubCategory).
+ * Daily points for This Month / Custom; monthly points for Rolling 3 months / YTD / 12 Months
+ * so the chart stays readable. Budget shows as a dashed reference line vs the solid Actual line.
+ */
+function BudgetVsActualChart({ data, granularity }) {
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  const chartData = data
+    .map((d) => ({
+      date: typeof d.PeriodDate === 'string' ? d.PeriodDate.slice(0, 10) : d.PeriodDate,
+      actual: Number(d.ActualRevenue ?? 0),
+      budget: Number(d.BudgetRevenue ?? 0),
+    }))
+    .filter((d) => d.date);
+
+  if (chartData.length === 0) return null;
+
+  const totalActual = chartData.reduce((s, d) => s + d.actual, 0);
+  const totalBudget = chartData.reduce((s, d) => s + d.budget, 0);
+  const variance = totalActual - totalBudget;
+  const attainment = totalBudget !== 0 ? totalActual / totalBudget : null;
+  const aboveBudget = variance >= 0;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <span className="text-[11px] text-gwsa-text-muted">
+          Variance{' '}
+          <strong className={aboveBudget ? 'text-gwsa-green' : 'text-gwsa-red'}>
+            {aboveBudget ? '+' : ''}{formatCurrency(variance)}
+          </strong>
+          {attainment != null ? ` · ${formatPercent(attainment)} of budget` : ''}
+        </span>
+      </div>
+      <TrendChart
+        data={chartData}
+        title="Actual vs Budget (Core revenue)"
+        lines={[
+          { key: 'actual', color: '#3B82F6', name: 'Actual' },
+          { key: 'budget', color: '#F59E0B', name: 'Budget', dashed: true },
+        ]}
+        dateAxisGranularity={granularity}
+      />
+    </div>
+  );
+}
+
+function DonationsTab({
+  data,
+  totalDonations,
+  avgDaily,
+  peakDay,
+  lowestDay,
+  preset,
+  rangeStart,
+  rangeEnd,
+  calendarDays,
+  loadError,
+}) {
+  const periodLine = `${preset} · ${formatDateShort(rangeStart)} – ${formatDateShort(rangeEnd)}`;
+  const fmtDay = (raw) =>
+    raw != null
+      ? formatDateShort(typeof raw === 'string' ? raw.slice(0, 10) : String(raw))
+      : null;
+  const peakDate = fmtDay(peakDay.DonationDate);
+  const lowestDate = fmtDay(lowestDay.DonationDate);
+
+  const chartSeries = data.length <= 120 ? data : data.slice(-120);
+  const chartData = chartSeries.map((d) => ({
+    date: d.DonationDate,
+    value: d.Donations,
+  }));
+
+  return (
+    <div className="space-y-4 pt-2">
+      {loadError ? (
+        <div className="rounded-lg border border-gwsa-red/40 bg-gwsa-red/10 px-3 py-2 text-xs text-gwsa-red">
+          {loadError}
+        </div>
+      ) : null}
+
+      {!loadError && data.length === 0 ? (
+        <p className="text-sm text-gwsa-text-muted">
+          No donation rows for this store and date range. Confirm{' '}
+          <code className="text-[11px] bg-gwsa-bg px-1 rounded">tbl_Donation.Storeid</code> matches this
+          location.
+        </p>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-3">
+        <MetricCard
+          label="Total donations"
+          value={formatNumber(totalDonations)}
+          color="green"
+          subtext={periodLine}
+        />
+        <MetricCard
+          label="Daily average"
+          value={formatNumber(avgDaily)}
+          color="blue"
+          subtext={`Total ÷ ${calendarDays} calendar days`}
+        />
+        <MetricCard
+          label="Peak day"
+          value={formatNumber(peakDay.Donations || 0)}
+          subtext={peakDate ? `${peakDate} · highest` : '—'}
+          color="amber"
+        />
+        <MetricCard
+          label="Lowest day"
+          value={formatNumber(lowestDay.Donations || 0)}
+          subtext={lowestDate ? `${lowestDate} · lowest with data` : '—'}
+          color="cyan"
+        />
+      </div>
+
+      {!loadError && chartData.length > 0 ? (
+        <>
+          {data.length > 120 ? (
+            <p className="text-[10px] text-gwsa-text-muted -mt-1">
+              Showing last 120 days of {data.length} in chart.
+            </p>
+          ) : null}
+          <TrendChart
+            data={chartData}
+            title="Daily donations"
+            lines={[{ key: 'value', color: '#10B981', name: 'Donations' }]}
+            chartType="bar"
+            dateAxisGranularity="day"
+          />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -414,6 +619,7 @@ function DoorCountTab({
   totalVisits,
   avgDaily,
   peakDay,
+  lowestDay,
   preset,
   rangeStart,
   rangeEnd,
@@ -421,16 +627,13 @@ function DoorCountTab({
   loadError,
 }) {
   const periodLine = `${preset} · ${formatDateShort(rangeStart)} – ${formatDateShort(rangeEnd)}`;
-  const peakDate =
-    peakDay.CountDate != null
-      ? formatDateShort(
-          typeof peakDay.CountDate === 'string'
-            ? peakDay.CountDate.slice(0, 10)
-            : String(peakDay.CountDate),
-        )
+  const fmtDay = (raw) =>
+    raw != null
+      ? formatDateShort(typeof raw === 'string' ? raw.slice(0, 10) : String(raw))
       : null;
+  const peakDate = fmtDay(peakDay.CountDate);
+  const lowestDate = fmtDay(lowestDay?.CountDate);
 
-  const daysWithData = data.length;
   const chartSeries =
     data.length <= 120 ? data : data.slice(-120);
   const chartData = chartSeries.map((d) => ({
@@ -440,13 +643,6 @@ function DoorCountTab({
 
   return (
     <div className="space-y-4 pt-2">
-      <p className="text-[11px] text-gwsa-text-muted leading-snug">
-        Same presets as Financials (This Month, Rolling 3 months, YTD, 12 Months).{' '}
-        <strong className="font-medium text-gwsa-text-secondary">In</strong> counts →{' '}
-        <code className="text-[10px] bg-gwsa-bg px-1 rounded">DonorVisits</code>
-        . Average = total ÷ {calendarDays} calendar days. Peak = max single-day In.
-      </p>
-
       {loadError ? (
         <div className="rounded-lg border border-gwsa-red/40 bg-gwsa-red/10 px-3 py-2 text-xs text-gwsa-red">
           {loadError}
@@ -480,14 +676,10 @@ function DoorCountTab({
           color="amber"
         />
         <MetricCard
-          label="Days with data"
-          value={formatNumber(daysWithData)}
+          label="Lowest day"
+          value={formatNumber(lowestDay?.DonorVisits || 0)}
+          subtext={lowestDate ? `${lowestDate} · lowest In with data` : '—'}
           color="cyan"
-          subtext={
-            daysWithData < calendarDays
-              ? `${calendarDays} days in range · gaps have no counter rows`
-              : 'One row per day in range'
-          }
         />
       </div>
 
@@ -511,17 +703,20 @@ function DoorCountTab({
   );
 }
 
-function TrendsTab({ data, preset, financialsData, doorCountData, includeDoorCount = true }) {
+function TrendsTab({ data, preset, financialsData, doorCountData, donationsData = [], includeDoorCount = true }) {
   const isThisMonth = preset === 'This Month';
+  const DONATIONS_OPTION = { key: 'Donations', label: 'Donations', color: '#8B5CF6' };
   const metricOptions = isThisMonth
     ? [
         { key: 'NetRevenue', label: 'Revenue', color: '#3B82F6' },
         ...(includeDoorCount ? [{ key: 'DoorCount', label: 'Door Count', color: '#06B6D4' }] : []),
+        DONATIONS_OPTION,
       ]
     : [
         { key: 'NetIncome', label: 'Net Income', color: '#10B981' },
         { key: 'NetRevenue', label: 'Revenue', color: '#3B82F6' },
         ...(includeDoorCount ? [{ key: 'DoorCount', label: 'Door Count', color: '#06B6D4' }] : []),
+        DONATIONS_OPTION,
         { key: 'ExpenseRatio', label: 'Expense Ratio', color: '#F59E0B' },
       ];
   const [activeMetrics, setActiveMetrics] = useState(
@@ -532,8 +727,10 @@ function TrendsTab({ data, preset, financialsData, doorCountData, includeDoorCou
 
   useEffect(() => {
     const allowedKeys = isThisMonth
-      ? (includeDoorCount ? ['NetRevenue', 'DoorCount'] : ['NetRevenue'])
-      : (includeDoorCount ? ['NetIncome', 'NetRevenue', 'DoorCount', 'ExpenseRatio'] : ['NetIncome', 'NetRevenue', 'ExpenseRatio']);
+      ? (includeDoorCount ? ['NetRevenue', 'DoorCount', 'Donations'] : ['NetRevenue', 'Donations'])
+      : (includeDoorCount
+          ? ['NetIncome', 'NetRevenue', 'DoorCount', 'Donations', 'ExpenseRatio']
+          : ['NetIncome', 'NetRevenue', 'Donations', 'ExpenseRatio']);
     setActiveMetrics((prev) => {
       const next = prev.filter((k) => allowedKeys.includes(k));
       if (next.length) return next;
@@ -551,11 +748,12 @@ function TrendsTab({ data, preset, financialsData, doorCountData, includeDoorCou
     ? (() => {
         // This Month trends should use the same daily revenue rows as Financials.
         const byDate = new Map();
+        const blank = (key) => ({ date: key, NetRevenue: 0, DoorCount: 0, Donations: 0 });
         financialsData.forEach((row) => {
           const dt = row.SalesDate || row.PeriodMonth;
           if (!dt) return;
           const key = String(dt).slice(0, 10);
-          const current = byDate.get(key) || { date: key, NetRevenue: 0, DoorCount: 0 };
+          const current = byDate.get(key) || blank(key);
           current.NetRevenue += Number(row.NetRevenue || row.TotalRevenue || 0);
           byDate.set(key, current);
         });
@@ -564,17 +762,43 @@ function TrendsTab({ data, preset, financialsData, doorCountData, includeDoorCou
             const dt = row.CountDate;
             if (!dt) return;
             const key = String(dt).slice(0, 10);
-            const current = byDate.get(key) || { date: key, NetRevenue: 0, DoorCount: 0 };
+            const current = byDate.get(key) || blank(key);
             current.DoorCount += Number(row.DonorVisits || 0);
             byDate.set(key, current);
           });
         }
+        donationsData.forEach((row) => {
+          const dt = row.DonationDate;
+          if (!dt) return;
+          const key = String(dt).slice(0, 10);
+          const current = byDate.get(key) || blank(key);
+          current.Donations += Number(row.Donations || 0);
+          byDate.set(key, current);
+        });
         return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
       })()
-    : data.map((d) => ({
-        date: d.PeriodMonth,
-        ...Object.fromEntries(activeMetrics.map((k) => [k, d[k]])),
-      }));
+    : (() => {
+        // Monthly trends: aggregate daily donation rows into each calendar month (YYYY-MM-01).
+        const donationsByMonth = new Map();
+        donationsData.forEach((row) => {
+          const dt = row.DonationDate;
+          if (!dt) return;
+          const monthKey = `${String(dt).slice(0, 7)}-01`;
+          donationsByMonth.set(monthKey, (donationsByMonth.get(monthKey) || 0) + Number(row.Donations || 0));
+        });
+        return data.map((d) => {
+          const monthKey = String(d.PeriodMonth).slice(0, 10);
+          return {
+            date: d.PeriodMonth,
+            ...Object.fromEntries(
+              activeMetrics.map((k) => [
+                k,
+                k === 'Donations' ? (donationsByMonth.get(monthKey) ?? 0) : d[k],
+              ]),
+            ),
+          };
+        });
+      })();
 
   const lines = metricOptions
     .filter((m) => activeMetrics.includes(m.key))

@@ -41,6 +41,17 @@ def _validated_retail_monthly_financial_object() -> str:
     return name
 
 
+def _validated_budget_vs_actual_object() -> str:
+    """Actual vs Budget daily Core revenue: JS_API.dbo.DailyCoreRevenueBudgetVsActual_NoSubCategory (or env override)."""
+    name = (Config.SQL_BUDGET_VS_ACTUAL_OBJECT or "").strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
+        raise ValueError(
+            "SQL_BUDGET_VS_ACTUAL_OBJECT must be set "
+            "(e.g. JS_API.dbo.DailyCoreRevenueBudgetVsActual_NoSubCategory)"
+        )
+    return name
+
+
 def _validated_locations_table() -> str:
     """Locations table (join key LocationID + display name for GP sales unit)."""
     name = (Config.SQL_LOCATIONS_TABLE or "").strip()
@@ -518,6 +529,192 @@ def _get_financials_retail_monthly(store_id: str, start_date: str, end_date: str
         ORDER BY d.[Year], d.[Month]
     """
     return _execute_query(sql, (sid, *month_params))
+
+
+# DailyCoreRevenueBudgetVsActual_NoSubCategory: daily [Date], [Unit] (3rd segment = location id),
+# [sales unit name], [Category], [ActualCoreRevenue], [BudgetCoreRevenue], [RevenueVariance].
+BUDGET_DATE_SQL = "CAST(d.[Date] AS DATE)"
+BUDGET_SUM_COLUMNS = """
+        CAST(SUM(ISNULL(CAST(d.[ActualCoreRevenue] AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS ActualRevenue,
+        CAST(SUM(ISNULL(CAST(d.[BudgetCoreRevenue] AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS BudgetRevenue,
+        CAST(SUM(ISNULL(CAST(d.[RevenueVariance] AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS RevenueVariance
+"""
+
+
+def _budget_category_filter_sql() -> Tuple[str, tuple]:
+    """Budget table only has [Category] (no [RevenueType]). Empty SQL_SALES_CORE_CATEGORY = no filter."""
+    c = (Config.SQL_SALES_CORE_CATEGORY or "").strip()
+    if not c:
+        return "", ()
+    frag = (
+        " AND LTRIM(RTRIM(CAST(d.[Category] AS NVARCHAR(200)))) COLLATE Latin1_General_CI_AI "
+        "= LTRIM(RTRIM(?)) COLLATE Latin1_General_CI_AI"
+    )
+    return frag, (c,)
+
+
+def _budget_period_grain_sql(grain: str) -> Tuple[str, str, str]:
+    """(period_select, group_by, order_by) for daily or monthly buckets keyed as PeriodDate."""
+    if (grain or "day").lower() == "month":
+        return (
+            "DATEFROMPARTS(d.[Year], d.[Month], 1) AS PeriodDate",
+            "GROUP BY d.[Year], d.[Month]",
+            "ORDER BY d.[Year], d.[Month]",
+        )
+    return (
+        f"{BUDGET_DATE_SQL} AS PeriodDate",
+        f"GROUP BY {BUDGET_DATE_SQL}",
+        "ORDER BY PeriodDate",
+    )
+
+
+def _budget_unit_filter_static(store_id: str) -> Optional[Tuple[str, tuple]]:
+    """
+    WHERE fragment + params to scope the budget table to one app store (static mode).
+    Mirrors the MTD TotalCore matching: [Unit] 3rd segment by sold/store id, then [sales unit name].
+    Returns None when the store id is unknown.
+    """
+    from db.static_locations import get_static_store_meta, sales_unit_name_for_store
+
+    meta = get_static_store_meta(store_id)
+    if not meta:
+        return None
+
+    uid = TOTAL_CORE_UNIT_LOCATION_ID_SQL
+    sold = meta.get("sold_store_id")
+    ssu = meta.get("sales_store_unit")
+    sid = (store_id or "").strip()
+
+    if sold is not None:
+        return f" AND {uid} = ?", (int(sold),)
+    if sid.isdigit():
+        return f" AND {uid} = ?", (int(sid),)
+    if ssu is not None and str(ssu).strip():
+        return (
+            " AND CHARINDEX(LTRIM(RTRIM(?)), LTRIM(RTRIM(CAST(d.[Unit] AS NVARCHAR(200))))) > 0",
+            (str(ssu).strip(),),
+        )
+    unit = sales_unit_name_for_store(store_id)
+    if not unit:
+        return None
+    return _sales_unit_name_predicate_sql(unit)
+
+
+def get_budget_vs_actual(store_id: str, start_date: str, end_date: str, grain: str = "day") -> list:
+    """
+    Actual vs Budget Core revenue from DailyCoreRevenueBudgetVsActual_NoSubCategory.
+    grain='day'  -> one row per calendar day (This Month / Custom).
+    grain='month' -> one row per Year/Month (Rolling 3 months / YTD / 12 Months) to avoid crowding.
+    Each row: { PeriodDate, ActualRevenue, BudgetRevenue, RevenueVariance }.
+    """
+    obj = _validated_budget_vs_actual_object()
+    cat_sql, cat_params = _budget_category_filter_sql()
+    period_select, group_by, order_by = _budget_period_grain_sql(grain)
+
+    date_filter = (
+        f"{BUDGET_DATE_SQL} >= CAST(? AS DATE) AND {BUDGET_DATE_SQL} <= CAST(? AS DATE)"
+    )
+
+    # Consolidated: sum every unit (no store filter).
+    if _is_consolidated_location(store_id):
+        sql = f"""
+            SELECT
+                {period_select},
+                {BUDGET_SUM_COLUMNS}
+            FROM {obj} AS d
+            WHERE {date_filter}
+            {cat_sql}
+            {group_by}
+            {order_by}
+        """
+        return _execute_query(sql, (start_date, end_date, *cat_params))
+
+    if Config.LOCATIONS_SOURCE == "static":
+        unit_filter = _budget_unit_filter_static(store_id)
+        if unit_filter is None:
+            return []
+        unit_sql, unit_params = unit_filter
+        sql = f"""
+            SELECT
+                {period_select},
+                {BUDGET_SUM_COLUMNS}
+            FROM {obj} AS d
+            WHERE {date_filter}
+            {cat_sql}
+            {unit_sql}
+            {group_by}
+            {order_by}
+        """
+        return _execute_query(sql, (start_date, end_date, *cat_params, *unit_params))
+
+    # Database mode: INNER JOIN dbo.Locations using the same predicate as MTD TotalCore.
+    loc_tbl = _validated_locations_table()
+    sid = (store_id or "").strip()
+    join_pred = _total_core_join_pred_database()
+    sql = f"""
+        SELECT
+            {period_select},
+            {BUDGET_SUM_COLUMNS}
+        FROM {obj} AS d
+        INNER JOIN {loc_tbl} AS loc
+          ON loc.LocationID = ?
+        {join_pred}
+        WHERE {date_filter}
+        {cat_sql}
+        {group_by}
+        {order_by}
+    """
+    return _execute_query(sql, (sid, start_date, end_date, *cat_params))
+
+
+def _validated_donations_object() -> str:
+    """Donations daily table: JS_API.dbo.tbl_Donation (or env override)."""
+    name = (Config.SQL_DONATIONS_OBJECT or "").strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
+        raise ValueError("SQL_DONATIONS_OBJECT must be set (e.g. JS_API.dbo.tbl_Donation)")
+    return name
+
+
+def get_donations(store_id: str, start_date: str, end_date: str) -> list:
+    """
+    Daily donation totals from tbl_Donation: SUM([DonationAmt]) per calendar day for one store.
+    Storeid maps directly to the app/location id (e.g. 127). Consolidated sums every store.
+    Returns rows: { DonationDate, Donations }.
+    """
+    obj = _validated_donations_object()
+    dcol = _bracketed_col(Config.SQL_DONATIONS_COL_DATE, "SQL_DONATIONS_COL_DATE")
+    acol = _bracketed_col(Config.SQL_DONATIONS_COL_AMOUNT, "SQL_DONATIONS_COL_AMOUNT")
+    scol = _bracketed_col(Config.SQL_DONATIONS_COL_STORE, "SQL_DONATIONS_COL_STORE")
+
+    sum_amt = (
+        f"CAST(SUM(ISNULL(CAST(d.{acol} AS DECIMAL(18, 2)), 0)) AS DECIMAL(18, 2)) AS Donations"
+    )
+    date_expr = f"CAST(d.{dcol} AS DATE)"
+
+    if _is_consolidated_location(store_id):
+        sql = f"""
+            SELECT {date_expr} AS DonationDate, {sum_amt}
+            FROM {obj} AS d
+            WHERE {date_expr} BETWEEN ? AND ?
+            GROUP BY {date_expr}
+            ORDER BY {date_expr}
+        """
+        return _execute_query(sql, (start_date, end_date))
+
+    sid = (store_id or "").strip()
+    if not sid:
+        return []
+    # Storeid may be stored as nvarchar; compare as trimmed text to avoid int-conversion errors.
+    store_match = f"LTRIM(RTRIM(CAST(d.{scol} AS NVARCHAR(50)))) = LTRIM(RTRIM(?))"
+    sql = f"""
+        SELECT {date_expr} AS DonationDate, {sum_amt}
+        FROM {obj} AS d
+        WHERE {store_match}
+          AND {date_expr} BETWEEN ? AND ?
+        GROUP BY {date_expr}
+        ORDER BY {date_expr}
+    """
+    return _execute_query(sql, (sid, start_date, end_date))
 
 
 def get_door_count(store_id: str, start_date: str, end_date: str) -> list:

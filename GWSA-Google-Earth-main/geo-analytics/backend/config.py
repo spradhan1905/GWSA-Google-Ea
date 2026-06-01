@@ -44,6 +44,10 @@ class Config:
     SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT = os.environ.get(
         'SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT', 'JS_API.dbo.RetailStoreMonthlyFinancialSummary'
     ).strip()
+    # Actual vs Budget (daily Core revenue): [Unit] encodes location like TotalCoreTableFinal; has [sales unit name].
+    SQL_BUDGET_VS_ACTUAL_OBJECT = os.environ.get(
+        'SQL_BUDGET_VS_ACTUAL_OBJECT', 'JS_API.dbo.DailyCoreRevenueBudgetVsActual_NoSubCategory'
+    ).strip()
     # Locations: "static" = backend/db/static_locations.py (no dbo.Locations table). "database" = SQL_LOCATIONS_TABLE in SQL.
     LOCATIONS_SOURCE = os.environ.get('LOCATIONS_SOURCE', 'static').strip().lower()
     # Used only when LOCATIONS_SOURCE=database
@@ -55,6 +59,12 @@ class Config:
     # True = join only on LocationName + numeric LocationID (no extra columns on Locations). Default True until migration.
     # After models/migrations/001_locations_add_sales_keys.sql and populating keys, set False for full GP matching.
     SQL_LOCATIONS_MINIMAL_JOIN = os.environ.get('SQL_LOCATIONS_MINIMAL_JOIN', 'True').lower() == 'true'
+    # Donations: daily donation rows, e.g. JS_API.dbo.tbl_Donation. Storeid matches app/location id directly.
+    SQL_DONATIONS_OBJECT = os.environ.get('SQL_DONATIONS_OBJECT', 'JS_API.dbo.tbl_Donation').strip()
+    SQL_DONATIONS_COL_DATE = os.environ.get('SQL_DONATIONS_COL_DATE', 'DonDate').strip()
+    # Effective donation amount/count (already reflects any OverrideAmt). Use this, not NativeCount.
+    SQL_DONATIONS_COL_AMOUNT = os.environ.get('SQL_DONATIONS_COL_AMOUNT', 'DonationAmt').strip()
+    SQL_DONATIONS_COL_STORE = os.environ.get('SQL_DONATIONS_COL_STORE', 'Storeid').strip()
     # Door counts: three-part name, e.g. PeopleCounter.dbo.PCounter (see SQL_DOOR_COUNT_COL_*).
     SQL_DOOR_COUNT_OBJECT = os.environ.get('SQL_DOOR_COUNT_OBJECT', 'PeopleCounter.dbo.PCounter').strip()
     # PCounter uses [Date] (daily grain is rolled up from hourly rows in SQL).

@@ -66,6 +66,15 @@ export const fetchFinancials = (storeId, start, end, { thisMonth = false } = {})
 export const fetchDoorCount = (storeId, start, end) =>
   api.get(`/door-count/${encodeURIComponent(storeId)}`, { params: { start, end } });
 
+export const fetchDonations = (storeId, start, end) =>
+  api.get(`/donations/${encodeURIComponent(storeId)}`, { params: { start, end } });
+
+/** grain: 'day' (This Month / Custom) or 'month' (Rolling 3 months / YTD / 12 Months). Actual vs Budget Core revenue. */
+export const fetchBudgetVsActual = (storeId, start, end, { grain = 'day' } = {}) =>
+  api.get(`/budget-vs-actual/${encodeURIComponent(storeId)}`, {
+    params: { start, end, grain },
+  });
+
 export const fetchTrends = (storeId, months = 12) =>
   api.get(`/trends/${encodeURIComponent(storeId)}`, { params: { months } });
 

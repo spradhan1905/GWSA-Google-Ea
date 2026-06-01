@@ -54,6 +54,8 @@ def create_app():
     from routes.trends import trends_bp
     from routes.chat import chat_bp
     from routes.donor_addresses import donor_addresses_bp
+    from routes.budget_vs_actual import budget_vs_actual_bp
+    from routes.donations import donations_bp
 
     app.register_blueprint(locations_bp)
     app.register_blueprint(financials_bp)
@@ -61,6 +63,8 @@ def create_app():
     app.register_blueprint(trends_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(donor_addresses_bp)
+    app.register_blueprint(budget_vs_actual_bp)
+    app.register_blueprint(donations_bp)
 
     # ─── Error Handlers ───────────────────────
     @app.errorhandler(429)
@@ -93,6 +97,7 @@ def create_app():
             "sql_sales_line_object": Config.SQL_SALES_LINE_OBJECT,
             "sql_this_month_revenue_object": Config.SQL_THIS_MONTH_REVENUE_OBJECT,
             "sql_retail_monthly_financial_object": Config.SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT,
+            "sql_budget_vs_actual_object": Config.SQL_BUDGET_VS_ACTUAL_OBJECT,
             "sql_locations_table": Config.SQL_LOCATIONS_TABLE,
             "sql_sales_core_category": Config.SQL_SALES_CORE_CATEGORY,
             "sql_sales_unit_name_flexible": Config.SQL_SALES_UNIT_NAME_FLEXIBLE,

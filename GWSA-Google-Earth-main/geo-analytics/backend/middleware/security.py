@@ -27,6 +27,16 @@ class DoorCountQuerySchema(Schema):
     start = fields.Date(required=True)
     end   = fields.Date(required=True)
 
+class DonationsQuerySchema(Schema):
+    start = fields.Date(required=True)
+    end   = fields.Date(required=True)
+
+class BudgetVsActualQuerySchema(Schema):
+    start = fields.Date(required=True)
+    end   = fields.Date(required=True)
+    # 'day' for This Month / Custom; 'month' for Rolling 3 months / YTD / 12 Months (avoids crowding).
+    grain = fields.Str(load_default='day', validate=validate.OneOf(['day', 'month']))
+
 class TrendsQuerySchema(Schema):
     months = fields.Int(load_default=12, validate=validate.Range(min=1, max=60))
 
