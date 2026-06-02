@@ -30,7 +30,7 @@ def chart_rows_for_payload(intent: str, analytics_data: dict) -> list:
     """Select row keys for chart envelope from structured analytics payloads."""
     if not isinstance(analytics_data, dict):
         return []
-    if intent in {"rank_locations", "metric_breakdown", "derived_metric"}:
+    if intent in {"rank_locations", "metric_breakdown", "derived_metric", "budget_vs_actual"}:
         return list(analytics_data.get("locations") or [])[:50]
     if intent in {"rank_time_periods"}:
         return list(analytics_data.get("periods") or [])[:50]

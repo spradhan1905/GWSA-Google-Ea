@@ -34,6 +34,17 @@ class Config:
     SQL_TRUST_SERVER_CERTIFICATE = os.environ.get('SQL_TRUST_SERVER_CERTIFICATE', 'yes').strip()
     # True = Trusted Connection / Windows Integrated Security (no SQL login; app must run as a Windows user allowed on SQL)
     SQL_USE_WINDOWS_AUTH = os.environ.get('SQL_USE_WINDOWS_AUTH', 'False').lower() == 'true'
+    # Connection pool: warm connections reused across queries (chat ranking fans out across stores).
+    try:
+        SQL_POOL_MAX_SIZE = int((os.environ.get('SQL_POOL_MAX_SIZE') or '12').strip())
+    except ValueError:
+        SQL_POOL_MAX_SIZE = 12
+    SQL_POOL_MAX_SIZE = max(1, min(SQL_POOL_MAX_SIZE, 64))
+    try:
+        SQL_POOL_TIMEOUT_SEC = float((os.environ.get('SQL_POOL_TIMEOUT_SEC') or '30').strip())
+    except ValueError:
+        SQL_POOL_TIMEOUT_SEC = 30.0
+    SQL_POOL_TIMEOUT_SEC = max(1.0, min(SQL_POOL_TIMEOUT_SEC, 120.0))
     # Line-level sales (daily POS). Full three-part name, e.g. JS_API.dbo.SalesFactFinal (legacy / other uses).
     SQL_SALES_LINE_OBJECT = os.environ.get('SQL_SALES_LINE_OBJECT', 'JS_API.dbo.SalesFactFinal')
     # This Month MTD revenue: JS_API.dbo.TotalCoreTableFinal — [Unit] encodes location (e.g. 20-10-129-12000 → 129).
@@ -97,6 +108,8 @@ class Config:
     except ValueError:
         AI_COMPOSER_TIMEOUT_SEC = 8.0
     AI_COMPOSER_TIMEOUT_SEC = max(3.0, min(AI_COMPOSER_TIMEOUT_SEC, 120.0))
+    # Skip Azure OpenAI composer for straightforward factual answers (rankings, totals, budget).
+    AI_USE_FAST_REPLY = _env_bool('AI_USE_FAST_REPLY', True)
 
     # Azure OpenAI only (chat assistant)
     SECRET_KEY  = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-change-in-production')

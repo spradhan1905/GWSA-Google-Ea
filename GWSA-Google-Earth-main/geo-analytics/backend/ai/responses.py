@@ -227,6 +227,40 @@ def quota_fallback_reply(data_action: str, analytics_data: dict) -> str:
             f"Pins returned={pins}."
         )
 
+    if data_action and data_action.startswith("budget_vs_actual"):
+        if data_action.startswith("budget_vs_actual:store"):
+            att = (analytics_data or {}).get("attainment_pct")
+            nm = (analytics_data or {}).get("location_name") or "the store"
+            return (
+                "The AI service is temporarily unavailable; budget vs actual totals are ready. "
+                f"**{nm}**: actual **{(analytics_data or {}).get('actual_revenue')}**, "
+                f"budget **{(analytics_data or {}).get('budget_revenue')}**, "
+                f"attainment **{att}%**."
+            )
+        locs = (analytics_data or {}).get("locations") or []
+        if locs:
+            top = locs[0]
+            return (
+                "The AI service is temporarily unavailable; store budget ranking is ready. "
+                f"Leader **{top.get('location_name')}** at **{top.get('attainment_pct')}%** of budget."
+            )
+
+    if data_action and "donations" in (data_action or ""):
+        locs = (analytics_data or {}).get("locations") or []
+        periods = (analytics_data or {}).get("periods") or []
+        if locs:
+            top = locs[0]
+            return (
+                "The AI service is temporarily unavailable; donation ranking completed. "
+                f"**{top.get('location_name')}** leads at **{top.get('metric_value')}**."
+            )
+        if periods:
+            best = periods[0]
+            return (
+                "The AI service is temporarily unavailable; peak donation day: "
+                f"**{best.get('date')}** at **{best.get('metric_value')}**."
+            )
+
     return (
         "The AI service is temporarily unavailable or has hit its quota limit. "
         "The approved analytics request completed successfully."

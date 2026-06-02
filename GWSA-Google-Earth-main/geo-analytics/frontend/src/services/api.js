@@ -90,6 +90,111 @@ export const sendChatMessage = (message, storeContext, history, sessionState = n
     { timeout: CHAT_TIMEOUT_MS },
   );
 
+/**
+ * Streaming chat via Server-Sent Events (POST). Tokens arrive incrementally so the UI can
+ * render the answer as it is generated instead of waiting for the whole response.
+ *
+ * Callbacks: onMeta(meta), onDelta(textChunk, fullText), onDone({ reply }), onError(err).
+ * Returns a function that aborts the in-flight request.
+ */
+export const streamChatMessage = (
+  message,
+  storeContext,
+  history,
+  sessionState = null,
+  { onMeta, onDelta, onDone, onError } = {},
+) => {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (authConfigured) {
+        const token = await getApiAccessToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
+      }
+
+      const resp = await fetch(`${axiosBaseURL}/chat/stream`, {
+        method: 'POST',
+        headers,
+        credentials: authConfigured ? 'include' : 'same-origin',
+        signal: controller.signal,
+        body: JSON.stringify({
+          message,
+          store_context: storeContext,
+          conversation_history: history,
+          ...(sessionState && typeof sessionState === 'object' ? { session_state: sessionState } : {}),
+        }),
+      });
+
+      if (!resp.ok || !resp.body) {
+        let detail = '';
+        try {
+          const j = await resp.json();
+          detail = j?.error || j?.reply || '';
+        } catch { /* ignore */ }
+        const err = new Error(detail || `Chat stream failed (${resp.status})`);
+        err.status = resp.status;
+        throw err;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullText = '';
+      let finalReply = '';
+
+      const handleEvent = (rawEvent) => {
+        const lines = rawEvent.split('\n');
+        let eventName = 'message';
+        const dataLines = [];
+        for (const line of lines) {
+          if (line.startsWith('event:')) eventName = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+        }
+        if (!dataLines.length) return;
+        let payload;
+        try {
+          payload = JSON.parse(dataLines.join('\n'));
+        } catch {
+          return;
+        }
+        if (eventName === 'meta') {
+          onMeta?.(payload);
+        } else if (eventName === 'delta') {
+          fullText += payload.text || '';
+          onDelta?.(payload.text || '', fullText);
+        } else if (eventName === 'done') {
+          finalReply = payload.reply || fullText;
+        } else if (eventName === 'error') {
+          throw new Error(payload.error || 'AI service error');
+        }
+      };
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep;
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          if (rawEvent.trim()) handleEvent(rawEvent);
+        }
+      }
+      if (buffer.trim()) handleEvent(buffer);
+
+      onDone?.({ reply: finalReply || fullText });
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      onError?.(err);
+    }
+  })();
+
+  return () => controller.abort();
+};
+
 export const checkHealth = () => api.get('/health');
 
 export default api;

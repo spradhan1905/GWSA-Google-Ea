@@ -21,6 +21,8 @@ def _fmt_metric_amount(metric: str, value: Any) -> str:
     try:
         if m == "door_count":
             return f"{int(round(float(value))):,}"
+        if m == "donations":
+            return f"${float(value):,.2f}"
         if m in {"expense_ratio"}:
             return str(round(float(value), 4))
         return f"${float(value):,.2f}"

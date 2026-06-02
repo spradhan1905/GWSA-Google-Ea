@@ -6,7 +6,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Sparkles, Minimize2, Maximize2 } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
-import { sendChatMessage } from '../../services/api';
+import { streamChatMessage } from '../../services/api';
 
 const WELCOME_MESSAGE = {
   role: 'assistant',
@@ -27,56 +27,61 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
     }
   }, [messages, loading]);
 
-  const handleSend = useCallback(async (text) => {
+  const handleSend = useCallback((text) => {
     if (!text.trim() || loading) return;
 
     const userMsg = { role: 'user', content: text };
-    setMessages(prev => [...prev, userMsg]);
+    const history = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
+    // Append the user message + an empty assistant placeholder we stream tokens into.
+    setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', streaming: true }]);
     setLoading(true);
 
-    try {
-      const history = messages.slice(-10).map(m => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const res = await sendChatMessage(text, storeContext, history, sessionState);
-      const data = res.data;
-      if (data.session_state) {
-        setSessionState(data.session_state);
-      }
-      const aiMsg = {
-        role: 'assistant',
-        content: data.reply || 'I couldn\'t generate a response. Please try again.',
-        sqlUsed: data.sql_used,
-        queryData: data.data,
-        followups: data.followups,
-        responseType: data.response_type,
-        chart: data.chart,
-      };
-      setMessages(prev => [...prev, aiMsg]);
-    } catch (err) {
-      let errorMsg = 'Sorry, I encountered an error. Please try again.';
-      if (err.code === 'ECONNABORTED') {
-        errorMsg =
-          'That took longer than expected, so the request was stopped. '
-          + 'Try again with a narrower date range or a single focused question. '
-          + 'If this keeps happening often, your team can raise the chat timeout in deployment settings.';
-        if (import.meta.env.DEV) {
-          errorMsg +=
-            ' Dev note: `VITE_CHAT_TIMEOUT_MS` (frontend) and `AI_COMPLETION_TIMEOUT_SEC` (backend).';
+    const patchLast = (patch) => {
+      setMessages(prev => {
+        const next = [...prev];
+        for (let i = next.length - 1; i >= 0; i -= 1) {
+          if (next[i].role === 'assistant') {
+            next[i] = { ...next[i], ...(typeof patch === 'function' ? patch(next[i]) : patch) };
+            break;
+          }
         }
-      } else if (typeof err.response?.data?.reply === 'string' && err.response.data.reply.trim()) {
-        errorMsg = err.response.data.reply;
-      } else if (err.response?.status === 429) {
-        errorMsg = err.response?.data?.error || 'AI quota or rate limit reached. Please wait and try again later.';
-      } else if (typeof err.response?.data?.error === 'string' && err.response.data.error.trim()) {
-        errorMsg = err.response.data.error;
-      }
-      console.error('[Chat] Request failed', err.response?.data || err.message || err);
-      setMessages(prev => [...prev, { role: 'assistant', content: errorMsg, isError: true }]);
-    } finally {
-      setLoading(false);
-    }
+        return next;
+      });
+    };
+
+    streamChatMessage(text, storeContext, history, sessionState, {
+      onMeta: (meta) => {
+        if (meta.session_state) setSessionState(meta.session_state);
+        patchLast({
+          sqlUsed: meta.sql_used,
+          queryData: meta.data,
+          followups: meta.followups,
+          responseType: meta.response_type,
+          chart: meta.chart,
+        });
+      },
+      onDelta: (_chunk, fullText) => {
+        patchLast({ content: fullText });
+      },
+      onDone: ({ reply }) => {
+        patchLast(msg => ({
+          content: reply || msg.content || 'I couldn\'t generate a response. Please try again.',
+          streaming: false,
+        }));
+        setLoading(false);
+      },
+      onError: (err) => {
+        let errorMsg = 'Sorry, I encountered an error. Please try again.';
+        if (err.status === 429) {
+          errorMsg = 'AI quota or rate limit reached. Please wait and try again later.';
+        } else if (typeof err.message === 'string' && err.message.trim()) {
+          errorMsg = err.message;
+        }
+        console.error('[Chat] Stream failed', err);
+        patchLast({ content: errorMsg, isError: true, streaming: false });
+        setLoading(false);
+      },
+    });
   }, [loading, messages, storeContext, sessionState]);
 
   if (!open) return null;
@@ -119,7 +124,7 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
           {messages.map((msg, i) => (
             <ChatMessage key={i} message={msg} onFollowupClick={handleSend} />
           ))}
-          {loading && (
+          {loading && !messages[messages.length - 1]?.content && (
             <div className="flex items-center gap-2 px-3 py-2">
               <div className="flex gap-1">
                 <div className="w-1.5 h-1.5 bg-gwsa-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />

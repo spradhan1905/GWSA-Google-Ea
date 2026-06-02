@@ -13,6 +13,8 @@ Only classify and extract slots.
 - Monthly financial KPIs (named months, quarters, YTD summaries for net income / expenses / ratios):
   use month/period grain as appropriate.
 - Door count / traffic: daily door metrics.
+- Donations: daily DonationAmt totals from tbl_Donation (dollar amounts collected).
+- Actual vs Budget: daily ActualCoreRevenue vs BudgetCoreRevenue (variance and % of budget).
 - IMPORTANT: "sale" or "sales" → `revenue`.
 - IMPORTANT: "highest/top/best sale per day" spanning the network → `peak_store_daily_revenue`.
 - IMPORTANT: "On which day/date did <store> have the highest sale" → `rank_time_periods` with that
@@ -35,12 +37,13 @@ Only classify and extract slots.
 - revenue_door_series: Daily aligned revenue + door count for one store.
 - data_catalog: What data/questions are available?
 - map_context_summary: Donor geography for a store.
+- budget_vs_actual: Actual core revenue vs budget for one store, or rank stores by attainment/variance.
 - unsupported: Cannot be answered from grounded analytics (HR, external data, naming managers).
 - greeting: Short hello with no analytics payload.
 
 ## Metrics
 
-revenue, door_count, net_income, operating_expenses, personnel_expenses, expense_ratio, revenue_per_visit
+revenue, door_count, donations, budget_attainment, net_income, operating_expenses, personnel_expenses, expense_ratio, revenue_per_visit
 
 ## Grains
 

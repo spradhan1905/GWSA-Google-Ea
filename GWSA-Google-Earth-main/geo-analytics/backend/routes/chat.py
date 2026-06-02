@@ -1,8 +1,12 @@
 """
 GWSA GeoAnalytics — AI Chat Route
-POST /api/chat — proxies to Azure OpenAI (key never in browser). V2 pipeline.
+POST /api/chat         — full JSON reply (blocking; legacy/compatible).
+POST /api/chat/stream  — Server-Sent Events: meta first, then token deltas (fast perceived latency).
+Both proxy to Azure OpenAI (key never in browser) and share one plan→retrieve pipeline.
 """
-from flask import Blueprint, request, jsonify
+import json
+
+from flask import Blueprint, request, jsonify, Response, stream_with_context
 from marshmallow import ValidationError
 from middleware.security import limiter, ChatRequestSchema
 from config import Config
@@ -33,13 +37,15 @@ from ai.responses import (
     unsupported_question_body,
 )
 from ai.router import run_retrieval
+from ai.fast_reply import try_fast_reply
 
 chat_bp = Blueprint("chat", __name__)
 
 _GREETING_REPLY = (
-    "Hi—I'm the GWSA GeoAnalytics assistant. Ask me about store revenue, door traffic, rankings, "
-    "month-over-month comparisons, or how a specific location is performing. "
-    "For example: which store had the highest revenue in March, or how Bandera is doing this month."
+    "Hi—I'm the GWSA GeoAnalytics assistant. Ask me about store revenue, door traffic, donations, "
+    "actual vs budget, rankings, month-over-month comparisons, or how a specific location is performing. "
+    "For example: which store had the highest revenue in March, how much did Bandera collect in donations, "
+    "or is Summit over budget this month."
 )
 
 
@@ -61,18 +67,16 @@ def _response_type_for(plan: dict, data_action: str, analytics_data: dict) -> st
     return "answer"
 
 
-@chat_bp.route('/api/chat', methods=['POST'])
-@limiter.limit("45 per minute")
-def chat():
-    if not Config.ENABLE_AI:
-        return jsonify(error='AI assistant is disabled for this environment'), 403
+def _immediate(body: dict, status: int = 200) -> dict:
+    return {"kind": "immediate", "body": body, "status": status}
 
-    schema = ChatRequestSchema()
-    try:
-        data = schema.load(request.get_json(force=True) or {})
-    except ValidationError as err:
-        return jsonify(error=err.messages), 400
 
+def _prepare_turn(data: dict) -> dict:
+    """
+    Shared pipeline for both endpoints: resolve plan, run approved retrieval, build the
+    response envelope. Returns either an 'immediate' body (greeting / clarification / data
+    gap / demo) or an 'llm' context with the composer messages ready to stream.
+    """
     user_message = data['message']
     store_context = data.get('store_context')
     history = data.get('conversation_history', [])
@@ -80,7 +84,7 @@ def chat():
 
     azure_client = get_azure_openai_client() if azure_openai_configured() else None
     if not azure_client:
-        return jsonify({
+        return _immediate({
             'reply': demo_reply(user_message, store_context),
             'sql_used': None,
             'data': None,
@@ -88,9 +92,10 @@ def chat():
         })
 
     plan = plan_request(user_message, store_context, history, session=session)
+    plan["_user_text"] = user_message
 
     if plan.get("clarification_message"):
-        return jsonify({
+        return _immediate({
             "reply": plan["clarification_message"],
             "response_type": "clarification_needed",
             "sql_used": None,
@@ -109,7 +114,7 @@ def chat():
             "Which store had the highest revenue in March?",
             "What data can I ask about?",
         ])
-        return jsonify({
+        return _immediate({
             "reply": _GREETING_REPLY,
             "response_type": "answer",
             "sql_used": None,
@@ -123,17 +128,22 @@ def chat():
         body = unsupported_question_body()
         body["session_state"] = session.to_payload()
         body["response_type"] = "data_gap"
-        return jsonify(body)
+        return _immediate(body)
 
     if plan.get("intent") in ("rank_time_periods", "peak_store_daily_revenue") and not plan.get("timeframe"):
         body = timeframe_required_gap_body()
         body["session_state"] = session.to_payload()
-        return jsonify(body)
+        return _immediate(body)
 
     if plan.get("intent") == "correlation_check" and not plan.get("timeframe"):
         body = correlation_timeframe_required_gap_body()
         body["session_state"] = session.to_payload()
-        return jsonify(body)
+        return _immediate(body)
+
+    if plan.get("intent") == "budget_vs_actual" and not plan.get("timeframe"):
+        body = timeframe_required_gap_body()
+        body["session_state"] = session.to_payload()
+        return _immediate(body)
 
     if plan.get("intent") in {"trend_summary", "multi_metric_summary", "map_context_summary"}:
         if not plan.get("trend_store_ref"):
@@ -144,14 +154,14 @@ def chat():
             }.get(plan["intent"], "that report")
             body = store_anchor_required_gap_body(which)
             body["session_state"] = session.to_payload()
-            return jsonify(body)
+            return _immediate(body)
 
     data_action, analytics_data = run_retrieval(plan, store_context)
 
     if plan.get("action") == "revenue_door_series" and not data_action:
         body = store_anchor_required_gap_body("aligned revenue and door-count series")
         body["session_state"] = session.to_payload()
-        return jsonify(body)
+        return _immediate(body)
 
     gap_desc = describe_data_gap(
         data_gap_code(plan, data_action or '', analytics_data or {}) or "",
@@ -164,22 +174,91 @@ def chat():
     chart = build_chart_envelope(plan.get("intent") or "", plan, analytics_data)
     response_type = _response_type_for(plan, data_action or "", analytics_data or {})
     plan_used = _plan_used_summary(plan)
-    composer_timeout = float(getattr(Config, "AI_COMPOSER_TIMEOUT_SEC", 8.0) or 8.0)
+
+    if getattr(Config, "AI_USE_FAST_REPLY", True):
+        fast = try_fast_reply(plan, data_action, analytics_data, user_message)
+        if fast:
+            return _immediate(_success_body({
+                "plan": plan,
+                "data_action": data_action,
+                "analytics_data": analytics_data,
+                "session_payload": session.to_payload(),
+                "followups": followups,
+                "chart": chart,
+                "response_type": response_type,
+                "plan_used": plan_used,
+            }, fast))
+
+    messages = build_composer_messages(
+        user_message,
+        session,
+        plan,
+        data_action,
+        analytics_data,
+        gap_desc,
+        history,
+    )
+
+    return {
+        "kind": "llm",
+        "azure_client": azure_client,
+        "messages": messages,
+        "plan": plan,
+        "data_action": data_action,
+        "analytics_data": analytics_data,
+        "session_payload": session.to_payload(),
+        "followups": followups,
+        "chart": chart,
+        "response_type": response_type,
+        "plan_used": plan_used,
+    }
+
+
+def _success_body(ctx: dict, reply: str) -> dict:
+    return chat_success_payload(
+        reply,
+        ctx["plan"],
+        ctx["data_action"],
+        ctx["analytics_data"],
+        session_payload=ctx["session_payload"],
+        followups=ctx["followups"],
+        chart=ctx["chart"],
+        response_type=ctx["response_type"],
+        plan_used=ctx["plan_used"],
+    )
+
+
+def _parse_request():
+    schema = ChatRequestSchema()
+    return schema.load(request.get_json(force=True) or {})
+
+
+@chat_bp.route('/api/chat', methods=['POST'])
+@limiter.limit("45 per minute")
+def chat():
+    if not Config.ENABLE_AI:
+        return jsonify(error='AI assistant is disabled for this environment'), 403
 
     try:
-        messages = build_composer_messages(
-            user_message,
-            session,
-            plan,
-            data_action,
-            analytics_data,
-            gap_desc,
-            history,
-        )
+        data = _parse_request()
+    except ValidationError as err:
+        return jsonify(error=err.messages), 400
+
+    prep = _prepare_turn(data)
+    if prep["kind"] == "immediate":
+        return jsonify(prep["body"]), prep.get("status", 200)
+
+    ctx = prep
+    azure_client = ctx["azure_client"]
+    composer_timeout = float(getattr(Config, "AI_COMPOSER_TIMEOUT_SEC", 8.0) or 8.0)
+    data_action = ctx["data_action"]
+    analytics_data = ctx["analytics_data"]
+
+    try:
         try:
             response = azure_client.chat.completions.create(
                 model=Config.AZURE_OPENAI_DEPLOYMENT,
-                messages=messages,
+                messages=ctx["messages"],
                 timeout=min(composer_timeout, 60.0),
             )
             reply = (response.choices[0].message.content or "").strip()
@@ -189,7 +268,7 @@ def chat():
             msg = str(e1).lower()
             if any(x in msg for x in ("timeout", "timed out", "deadline")):
                 try:
-                    short_msgs = [messages[0], messages[-1]]
+                    short_msgs = [ctx["messages"][0], ctx["messages"][-1]]
                     response = azure_client.chat.completions.create(
                         model=Config.AZURE_OPENAI_DEPLOYMENT,
                         messages=short_msgs,
@@ -204,18 +283,89 @@ def chat():
                 reply = quota_fallback_reply(data_action or "", analytics_data or {})
             else:
                 return provider_error_response(e1, data_action, analytics_data)
-        return jsonify(
-            chat_success_payload(
-                reply,
-                plan,
-                data_action,
-                analytics_data,
-                session_payload=session.to_payload(),
-                followups=followups,
-                chart=chart,
-                response_type=response_type,
-                plan_used=plan_used,
-            )
-        )
+        return jsonify(_success_body(ctx, reply))
     except Exception as e:
         return provider_error_response(e, data_action, analytics_data)
+
+
+def _sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
+
+
+@chat_bp.route('/api/chat/stream', methods=['POST'])
+@limiter.limit("45 per minute")
+def chat_stream():
+    if not Config.ENABLE_AI:
+        return jsonify(error='AI assistant is disabled for this environment'), 403
+
+    try:
+        data = _parse_request()
+    except ValidationError as err:
+        return jsonify(error=err.messages), 400
+
+    # Plan + retrieval run here (request context still available); only token streaming is deferred.
+    prep = _prepare_turn(data)
+
+    headers = {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+    }
+
+    if prep["kind"] == "immediate":
+        body = prep["body"]
+        reply_text = body.get("reply") or ""
+        meta = {k: v for k, v in body.items() if k != "reply"}
+
+        def gen_immediate():
+            yield _sse("meta", meta)
+            if reply_text:
+                yield _sse("delta", {"text": reply_text})
+            yield _sse("done", {"reply": reply_text})
+
+        return Response(stream_with_context(gen_immediate()), headers=headers)
+
+    ctx = prep
+    azure_client = ctx["azure_client"]
+    data_action = ctx["data_action"]
+    analytics_data = ctx["analytics_data"]
+    stream_timeout = float(getattr(Config, "AI_COMPLETION_TIMEOUT_SEC", 165.0) or 165.0)
+
+    def gen_llm():
+        meta = _success_body(ctx, "")
+        meta.pop("reply", None)
+        yield _sse("meta", meta)
+
+        chunks = []
+        try:
+            stream = azure_client.chat.completions.create(
+                model=Config.AZURE_OPENAI_DEPLOYMENT,
+                messages=ctx["messages"],
+                stream=True,
+                timeout=stream_timeout,
+            )
+            for chunk in stream:
+                try:
+                    choices = chunk.choices or []
+                    delta = choices[0].delta.content if choices else None
+                except Exception:
+                    delta = None
+                if delta:
+                    chunks.append(delta)
+                    yield _sse("delta", {"text": delta})
+        except Exception as e:
+            msg = str(e).lower()
+            if not any(x in msg for x in ("timeout", "timed out", "deadline", "429", "quota", "rate limit", "too many requests")):
+                # Surface unexpected provider errors so the UI can show a real message.
+                if not chunks:
+                    yield _sse("error", {"error": f"AI service error: {str(e).strip() or 'unknown'}"})
+            fallback = quota_fallback_reply(data_action or "", analytics_data or {})
+            if not chunks:
+                chunks.append(fallback)
+                yield _sse("delta", {"text": fallback})
+
+        reply = ("".join(chunks)).strip() or quota_fallback_reply(data_action or "", analytics_data or {})
+        yield _sse("done", {"reply": reply})
+
+    return Response(stream_with_context(gen_llm()), headers=headers)

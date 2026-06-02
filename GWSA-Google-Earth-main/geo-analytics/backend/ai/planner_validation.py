@@ -305,6 +305,7 @@ def convert_llm_plan_to_execution_plan(
         "requires_chart": bool(raw.get("requires_chart")),
         "sort_direction": raw.get("sort_direction") or "desc",
         "_llm_metrics": metrics,
+        "_user_text": str(raw.get("_user_text") or text_for_heuristic or ""),
     }
 
 

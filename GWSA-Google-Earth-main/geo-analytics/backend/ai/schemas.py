@@ -15,6 +15,7 @@ INTENT_ACTIONS = frozenset({
     "data_catalog",
     "map_context_summary",
     "peak_store_daily_revenue",
+    "budget_vs_actual",
     "unsupported",
     "revenue_door_series",
     "greeting",
@@ -36,6 +37,7 @@ ALLOWED_PLAN_INTENTS = frozenset({
     "revenue_door_series",
     "data_catalog",
     "map_context_summary",
+    "budget_vs_actual",
     "unsupported",
     "greeting",
     "clarification_needed",
@@ -44,6 +46,8 @@ ALLOWED_PLAN_INTENTS = frozenset({
 CANONICAL_METRICS = frozenset({
     "revenue",
     "door_count",
+    "donations",
+    "budget_attainment",
     "net_income",
     "operating_expenses",
     "personnel_expenses",
@@ -54,6 +58,8 @@ CANONICAL_METRICS = frozenset({
 INTENT_METRICS = frozenset({
     "revenue",
     "door_count",
+    "donations",
+    "budget_attainment",
     "net_income",
     "operating_expenses",
     "personnel_expenses",
@@ -61,7 +67,7 @@ INTENT_METRICS = frozenset({
     "revenue_per_visit",
 })
 
-RANK_HINTS = ("highest", "best", "top", "most", "lowest", "least")
+RANK_HINTS = ("highest", "best", "top", "most", "lowest", "least", "furthest", "beat", "beating")
 COMPARE_HINTS = ("compare", "vs", "versus", "against")
 SUMMARY_HINTS = ("summary", "how is", "how's", "performance", "doing")
 
@@ -96,6 +102,7 @@ INTENT_TO_ACTION = {
     "revenue_door_series": "revenue_door_series",
     "data_catalog": "data_catalog",
     "map_context_summary": "map_context_summary",
+    "budget_vs_actual": "budget_vs_actual",
     "unsupported": "none",
     "greeting": "none",
     "clarification_needed": "none",

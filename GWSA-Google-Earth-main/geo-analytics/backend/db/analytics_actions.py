@@ -12,10 +12,12 @@ from ai.planner_heuristic import (
 
 from db.queries import (
     _sum_field,
+    budget_vs_actual_summary_for_store,
     build_data_catalog,
     compare_locations,
     compare_period_totals,
     donor_map_summary,
+    get_donations,
     get_door_count,
     get_financials,
     get_location_catalog,
@@ -24,12 +26,15 @@ from db.queries import (
     multi_metric_snapshot,
     network_correlation_revenue_door,
     peak_store_daily_revenue,
+    rank_donation_days,
+    rank_donation_days_for_store,
     rank_door_count_days,
     rank_door_count_days_for_store,
     rank_locations,
     rank_revenue_days,
     rank_revenue_days_for_store,
     rank_store_revenue,
+    rank_stores_budget_variance,
     resolve_location_reference,
     revenue_per_visit_by_store,
     trend_summary_for_chat,
@@ -165,6 +170,9 @@ def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[st
                 if metric == "door_count":
                     rows = get_door_count(location_id, timeframe["start"], timeframe["end"])
                     metrics = {"door_count": int(round(_sum_field(rows, "DonorVisits")))}
+                elif metric == "donations":
+                    rows = get_donations(location_id, timeframe["start"], timeframe["end"])
+                    metrics = {"donations": round(_sum_field(rows, "Donations"), 2)}
                 else:
                     # Daily core revenue from TotalCoreTableFinal (not monthly financial rollup).
                     rows = get_financials(
@@ -246,6 +254,23 @@ def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[st
                         limit=plan["limit"],
                         timeframe_label=label,
                     )
+            elif metric == "donations":
+                if not use_network and single_id:
+                    data = rank_donation_days_for_store(
+                        single_id,
+                        timeframe["start"],
+                        timeframe["end"],
+                        limit=plan["limit"],
+                        timeframe_label=label,
+                    )
+                else:
+                    data = rank_donation_days(
+                        timeframe["start"],
+                        timeframe["end"],
+                        scope=scope_arg,
+                        limit=plan["limit"],
+                        timeframe_label=label,
+                    )
             else:
                 if not use_network and single_id:
                     data = rank_revenue_days_for_store(
@@ -292,7 +317,7 @@ def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[st
                 timeframe["start"],
                 timeframe["end"],
                 metric=metric if metric in {
-                    "revenue", "door_count", "net_income", "operating_expenses",
+                    "revenue", "door_count", "donations", "net_income", "operating_expenses",
                     "personnel_expenses", "expense_ratio",
                 } else "revenue",
                 scope=plan.get("scope") or "all_retail_stores",
@@ -377,5 +402,48 @@ def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[st
                 sid = str(loc["LocationID"])
                 data = donor_map_summary(sid)
                 selected_action = f"map_context:{sid}"
+
+    elif action == "budget_vs_actual":
+        if timeframe:
+            scope_arg = plan.get("scope") or "all_retail_stores"
+            label = timeframe.get("label")
+            ref = _target_store_ref()
+            if not ref and store_context:
+                loc_ctx = resolve_location_reference(store_context)
+                if loc_ctx:
+                    ref = str(loc_ctx["LocationID"])
+            text_low = (plan.get("_user_text") or "").lower()
+            network_rank = any(
+                x in text_low
+                for x in ("which store", "top ", "rank", "beat", "beating", "stores", "furthest")
+            )
+            single_store = bool(ref) and not network_rank
+            if single_store and ref:
+                loc = resolve_location_reference(ref)
+                if loc:
+                    sid = str(loc["LocationID"])
+                    data = budget_vs_actual_summary_for_store(
+                        sid,
+                        timeframe["start"],
+                        timeframe["end"],
+                        timeframe_label=label,
+                    )
+                    selected_action = f"budget_vs_actual:store:{sid}"
+            else:
+                sort = "attainment_desc"
+                low = (plan.get("_user_text") or "").lower()
+                if "below budget" in low or "under budget" in low or "furthest below" in low:
+                    sort = "attainment_asc"
+                elif "over budget" in low or "above budget" in low:
+                    sort = "variance_desc"
+                data = rank_stores_budget_variance(
+                    timeframe["start"],
+                    timeframe["end"],
+                    scope=scope_arg,
+                    limit=plan["limit"],
+                    timeframe_label=label,
+                    sort=sort,
+                )
+                selected_action = "budget_vs_actual:rank"
 
     return selected_action, data

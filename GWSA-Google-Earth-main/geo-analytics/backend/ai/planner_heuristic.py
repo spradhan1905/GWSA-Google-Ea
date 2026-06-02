@@ -215,6 +215,10 @@ def parse_comparison_timeframes(user_message: str, today: date = None):
 
 def detect_metric(user_message: str) -> str:
     text = (user_message or "").lower()
+    if wants_budget_vs_actual(text):
+        return "budget_attainment"
+    if wants_donations_metric(text):
+        return "donations"
     if any(word in text for word in ("door count", "door counts")):
         return "door_count"
     if ("visitor" in text or "traffic" in text or " visits" in text) and (
@@ -278,13 +282,45 @@ def wants_metric_breakdown(text: str) -> bool:
         return False
     if "top " in t and "store" in t:
         return False
-    return ("break down" in t or "broken down" in t or ("by store" in t and ("revenue" in t or "sales" in t or "door" in t)))
+    return ("break down" in t or "broken down" in t or ("by store" in t and ("revenue" in t or "sales" in t or "door" in t or "donation" in t)))
 
 
 def wants_map_donor_context(text: str) -> bool:
     t = text.lower()
     return ("donor address" in t or "donor map" in t or "geo" in t and "donor" in t
             or ("where" in t and "donor" in t and "located" in t))
+
+
+def wants_donations_metric(text: str) -> bool:
+    """True when the user asks about donation dollar totals (not just a 'Donation Station' store name)."""
+    t = (text or "").lower()
+    if "donation station" in t and not any(
+        x in t for x in (
+            "amount", "collect", "total donation", "how much", "peak", "average",
+            "rank", "compare", "donations", "$",
+        )
+    ):
+        return False
+    return (
+        "donations" in t
+        or "donation amount" in t
+        or "donation total" in t
+        or "collected in donations" in t
+        or (
+            "donation" in t
+            and any(x in t for x in ("how much", "total", "collect", "average", "peak", "lowest", "rank", "compare"))
+        )
+    )
+
+
+def wants_budget_vs_actual(text: str) -> bool:
+    t = (text or "").lower()
+    return any(x in t for x in (
+        "budget", "vs budget", "versus budget", "over budget", "under budget",
+        "budget variance", "variance to budget", "beat budget", "beating budget",
+        "actual vs budget", "actual versus budget", "% of budget", "percent of budget",
+        "budget attainment", "against budget", "below budget", "above budget",
+    ))
 
 
 def wants_multi_metric(text: str) -> bool:
@@ -555,6 +591,11 @@ def plan_request_heuristic(user_message: str, store_context: str, history: Optio
         intent = "compare_periods"
         action = "compare_periods"
 
+    elif wants_budget_vs_actual(text_raw) and timeframe:
+        intent = "budget_vs_actual"
+        action = "budget_vs_actual"
+        metric = "budget_attainment"
+
     elif wants_correlation(text_raw) and timeframe:
         intent = "correlation_check"
         action = "correlation_check"
@@ -651,4 +692,5 @@ def plan_request_heuristic(user_message: str, store_context: str, history: Optio
         "trend_store_ref": trend_ref,
         "trend_store_ref_kind": trend_ref_kind,
         "comparison": comparison_payload,
+        "_user_text": text_raw,
     }

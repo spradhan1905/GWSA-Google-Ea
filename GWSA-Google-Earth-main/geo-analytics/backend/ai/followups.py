@@ -61,6 +61,11 @@ _FOLLOWUP_TEMPLATES = {
         "Which store improved revenue per visit the most month over month?",
         "Plot revenue and door count together for the leader",
     ],
+    "budget_vs_actual": [
+        "Which store is furthest below budget?",
+        "Show actual vs budget trend for the top store",
+        "Compare budget attainment to last month",
+    ],
 }
 
 _METRIC_LABEL = {
@@ -71,6 +76,8 @@ _METRIC_LABEL = {
     "personnel_expenses": "personnel expenses",
     "expense_ratio": "expense ratio",
     "revenue_per_visit": "revenue per visit",
+    "donations": "donations",
+    "budget_attainment": "budget attainment",
 }
 
 
@@ -160,6 +167,7 @@ def chart_config_for_intent(intent: str, metric: str) -> Optional[Dict[str, Any]
         "revenue_door_series": {"type": "dual_axis_line", "x_key": "date", "y1_key": "revenue", "y2_key": "door_count"},
         "metric_breakdown": {"type": "horizontal_bar", "x_key": "metric_value", "y_key": "location_name"},
         "derived_metric": {"type": "horizontal_bar", "x_key": "metric_value", "y_key": "location_name"},
+        "budget_vs_actual": {"type": "horizontal_bar", "x_key": "attainment_pct", "y_key": "location_name"},
     }
     base = configs.get(intent)
     if not base:
