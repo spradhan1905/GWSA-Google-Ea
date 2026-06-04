@@ -7,7 +7,6 @@ import {
   X,
   ChevronLeft,
   TrendingUp,
-  DoorOpen,
   BarChart3,
   ExternalLink,
   User,
@@ -15,6 +14,7 @@ import {
   Users,
   Gift,
   GripVertical,
+  LayoutGrid,
 } from 'lucide-react';
 import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
 import { STORE_OPS_INFO_BY_ID } from '../../data/storeOpsInfo';
@@ -23,19 +23,26 @@ import TrendChart from './TrendChart';
 import DateRangePicker from './DateRangePicker';
 import MetricSelector from './MetricSelector';
 import LoadingSpinner from '../Layout/LoadingSpinner';
-import { fetchFinancials, fetchDoorCount, fetchTrends, fetchBudgetVsActual, fetchDonations } from '../../services/api';
+import {
+  fetchFinancials,
+  fetchDoorCount,
+  fetchTrends,
+  fetchBudgetVsActual,
+  fetchDonations,
+  fetchKeyMetrics,
+} from '../../services/api';
 import { formatCurrency, formatPercent, formatNumber, getChangeIndicator } from '../../utils/formatters';
-import { localDateISO, calendarDaysInclusive, formatDateShort } from '../../utils/dateUtils';
+import { localDateISO, calendarDaysInclusive, formatDateShort, toMonthKey } from '../../utils/dateUtils';
 import { FEATURES } from '../../config/features';
 
 const TABS = [
   { id: 'financials', label: 'Financials', icon: TrendingUp },
-  { id: 'donations', label: 'Donations', icon: Gift },
-  { id: 'doorcount', label: 'Door Count', icon: DoorOpen },
+  { id: 'keymetrics', label: 'Key Metrics', icon: LayoutGrid },
+  { id: 'donor-door', label: 'Donor / Door', icon: Gift },
   { id: 'trends', label: 'Trends', icon: BarChart3 },
   { id: 'info', label: 'Info', icon: User },
 ];
-const KPI_TAB_IDS = new Set(['financials', 'donations', 'doorcount', 'trends']);
+const KPI_TAB_IDS = new Set(['financials', 'keymetrics', 'donor-door', 'trends']);
 const CONSOLIDATED_ONLY_PRESETS = ['Rolling 3 months', 'YTD', '12 Months'];
 
 // Desktop panel resize (drag the left-edge handle to stretch the panel width).
@@ -48,7 +55,8 @@ function monthSpanInclusive(startIso, endIso) {
   const start = new Date(`${startIso}T12:00:00`);
   const end = new Date(`${endIso}T12:00:00`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 12;
-  return ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth()) + 1;
+  const span = ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth()) + 1;
+  return Math.min(240, Math.max(1, span));
 }
 
 function rangeForPreset(presetLabel) {
@@ -86,6 +94,8 @@ export default function SidePanel({ location, open, onClose }) {
   const [doorCountError, setDoorCountError] = useState(null);
   const [donations, setDonations] = useState([]);
   const [donationsError, setDonationsError] = useState(null);
+  const [keyMetrics, setKeyMetrics] = useState(null);
+  const [keyMetricsError, setKeyMetricsError] = useState(null);
   const [trends, setTrends] = useState([]);
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== 'undefined' && window.matchMedia(DESKTOP_MEDIA_QUERY).matches,
@@ -97,9 +107,10 @@ export default function SidePanel({ location, open, onClose }) {
   const isConsolidated = String(location?.id || '').toUpperCase() === 'CONSOLIDATED';
   const storeOpsInfo = STORE_OPS_INFO_BY_ID[String(location?.id ?? '')] || null;
   const isInfoEligible = location?.type === 'store' || location?.type === 'outlet';
+  const isKeyMetricsEligible = isInfoEligible;
   const availableTabs = TABS.filter((tab) => {
     if (!FEATURES.kpis && KPI_TAB_IDS.has(tab.id)) return false;
-    if (isConsolidated && tab.id === 'doorcount') return false;
+    if (tab.id === 'keymetrics' && !isKeyMetricsEligible) return false;
     if (tab.id === 'info' && (!isInfoEligible || !storeOpsInfo)) return false;
     return true;
   });
@@ -168,33 +179,35 @@ export default function SidePanel({ location, open, onClose }) {
       setBudgetVsActual([]);
       setDoorCount([]);
       setDonations([]);
+      setKeyMetrics(null);
       setTrends([]);
       setLoading(false);
       setError(null);
       setDoorCountError(null);
       setDonationsError(null);
+      setKeyMetricsError(null);
       return;
     }
     setError(null);
     setDoorCountError(null);
     setDonationsError(null);
+    setKeyMetricsError(null);
 
     const loadData = async () => {
       setLoading(true);
       try {
-        const rangeMonths = Math.min(60, Math.max(1, monthSpanInclusive(dateRange.start, dateRange.end)));
-        const trendMonths =
-          financialsPreset === 'Rolling 3 months'
-            ? 3
-            : financialsPreset === '12 Months'
-              ? 12
-              : financialsPreset === 'YTD'
-                ? rangeMonths
-                : 12;
+        const rangeMonths = monthSpanInclusive(dateRange.start, dateRange.end);
+        const trendQuery =
+          financialsPreset === 'This Month'
+            ? { months: Math.max(24, rangeMonths) }
+            : { start: dateRange.start, end: dateRange.end };
         const usesDailyGrain =
           !isConsolidated && (financialsPreset === 'This Month' || financialsPreset === 'Custom');
         const budgetGrain = usesDailyGrain ? 'day' : 'month';
-        const [finRes, dcRes, trRes, bvaRes, dnRes] = await Promise.allSettled([
+        const kmPromise = isKeyMetricsEligible
+          ? fetchKeyMetrics(location.id)
+          : Promise.resolve({ data: null });
+        const [finRes, dcRes, trRes, bvaRes, dnRes, kmRes] = await Promise.allSettled([
           fetchFinancials(location.id, dateRange.start, dateRange.end, {
             thisMonth:
               !isConsolidated && (financialsPreset === 'This Month' || financialsPreset === 'Custom'),
@@ -202,9 +215,10 @@ export default function SidePanel({ location, open, onClose }) {
           isConsolidated
             ? Promise.resolve({ data: [] })
             : fetchDoorCount(location.id, dateRange.start, dateRange.end),
-          fetchTrends(location.id, trendMonths),
+          fetchTrends(location.id, trendQuery),
           fetchBudgetVsActual(location.id, dateRange.start, dateRange.end, { grain: budgetGrain }),
           fetchDonations(location.id, dateRange.start, dateRange.end),
+          kmPromise,
         ]);
         if (finRes.status === 'fulfilled') setFinancials(finRes.value.data || []);
         if (bvaRes.status === 'fulfilled') {
@@ -239,6 +253,18 @@ export default function SidePanel({ location, open, onClose }) {
           );
         }
         if (trRes.status === 'fulfilled') setTrends(trRes.value.data || []);
+        if (kmRes.status === 'fulfilled') {
+          setKeyMetrics(kmRes.value.data || null);
+        } else {
+          setKeyMetrics(null);
+          const err = kmRes.reason;
+          const detail =
+            err?.response?.data?.error ??
+            (typeof err?.response?.data === 'string' ? err.response.data : null);
+          setKeyMetricsError(
+            detail || err?.message || 'Could not load key metrics. Check tbl_Locations / SQL.',
+          );
+        }
       } catch (e) {
         setError('Failed to load data. Please try again.');
       } finally {
@@ -246,7 +272,7 @@ export default function SidePanel({ location, open, onClose }) {
       }
     };
     loadData();
-  }, [location?.id, dateRange.start, dateRange.end, financialsPreset, isConsolidated]);
+  }, [location?.id, dateRange.start, dateRange.end, financialsPreset, isConsolidated, isKeyMetricsEligible]);
 
   // Reset tab on new location
   useEffect(() => {
@@ -374,7 +400,7 @@ export default function SidePanel({ location, open, onClose }) {
         )}
 
         {/* Date Range (hidden for static Info tab) */}
-        {FEATURES.kpis && activeTab !== 'info' && (
+        {FEATURES.kpis && activeTab !== 'info' && activeTab !== 'keymetrics' && (
           <div className="shrink-0 px-5 py-2">
             <DateRangePicker
               dateRange={dateRange}
@@ -421,32 +447,28 @@ export default function SidePanel({ location, open, onClose }) {
                   incomeChange={incomeChange}
                 />
               )}
-              {activeTab === 'donations' && (
-                <DonationsTab
-                  data={donations}
-                  totalDonations={totalDonations}
-                  avgDaily={donationAvgDaily}
-                  peakDay={donationPeakDay}
-                  lowestDay={donationLowestDay}
-                  preset={financialsPreset}
-                  rangeStart={dateRange.start}
-                  rangeEnd={dateRange.end}
-                  calendarDays={doorCalendarDays}
-                  loadError={donationsError}
-                />
+              {activeTab === 'keymetrics' && (
+                <KeyMetricsTab metrics={keyMetrics} loadError={keyMetricsError} />
               )}
-              {activeTab === 'doorcount' && (
-                <DoorCountTab
-                  data={doorCount}
+              {activeTab === 'donor-door' && (
+                <DonorDoorTab
+                  donationsData={donations}
+                  totalDonations={totalDonations}
+                  donationAvgDaily={donationAvgDaily}
+                  donationPeakDay={donationPeakDay}
+                  donationLowestDay={donationLowestDay}
+                  donationsError={donationsError}
+                  doorCountData={doorCount}
                   totalVisits={totalVisits}
-                  avgDaily={avgDaily}
-                  peakDay={peakDay}
-                  lowestDay={lowestDoorDay}
+                  doorAvgDaily={avgDaily}
+                  doorPeakDay={peakDay}
+                  doorLowestDay={lowestDoorDay}
+                  doorCountError={doorCountError}
+                  includeDoorCount={!isConsolidated}
                   preset={financialsPreset}
                   rangeStart={dateRange.start}
                   rangeEnd={dateRange.end}
                   calendarDays={doorCalendarDays}
-                  loadError={doorCountError}
                 />
               )}
               {activeTab === 'trends' && (
@@ -600,6 +622,121 @@ function BudgetVsActualChart({ data, granularity }) {
   );
 }
 
+function KeyMetricsTab({ metrics, loadError }) {
+  if (loadError) {
+    return (
+      <div className="rounded-lg border border-gwsa-red/40 bg-gwsa-red/10 px-3 py-2 text-xs text-gwsa-red mt-2">
+        {loadError}
+      </div>
+    );
+  }
+  if (!metrics) {
+    return (
+      <p className="text-sm text-gwsa-text-muted pt-2">No key metrics available for this location.</p>
+    );
+  }
+
+  const sqft = metrics.salesSquareFt;
+  const spsf = metrics.salesPerSqFtAnnualized;
+  const lease = metrics.leaseStatus;
+  const leaseLabel =
+    lease === 'LEASE' ? 'Leased' : lease === 'OWN' ? 'Owned' : 'Unknown';
+  const locName = metrics.location?.LocName;
+
+  return (
+    <div className="space-y-4 pt-2">
+      {locName ? (
+        <p className="text-xs text-gwsa-text-muted">
+          Location record: <strong className="text-gwsa-text-secondary">{locName}</strong>
+          {metrics.location?.Tier ? ` · ${metrics.location.Tier}` : ''}
+        </p>
+      ) : (
+        <p className="text-xs text-gwsa-text-muted">
+          No row in tbl_Locations for this store id. Square footage KPIs may be unavailable.
+        </p>
+      )}
+      <MetricCard
+        label="Sales Square Ft"
+        value={sqft != null ? formatNumber(sqft) : '—'}
+        color="blue"
+      />
+      <MetricCard
+        label="Sales per Sq Ft"
+        value={spsf != null ? formatCurrency(spsf) : '—'}
+        color="green"
+      />
+      <MetricCard
+        label="Leased or Owned"
+        value={leaseLabel}
+        color={lease === 'LEASE' ? 'amber' : lease === 'OWN' ? 'cyan' : 'amber'}
+      />
+    </div>
+  );
+}
+
+function DonorDoorTab({
+  donationsData,
+  totalDonations,
+  donationAvgDaily,
+  donationPeakDay,
+  donationLowestDay,
+  donationsError,
+  doorCountData,
+  totalVisits,
+  doorAvgDaily,
+  doorPeakDay,
+  doorLowestDay,
+  doorCountError,
+  includeDoorCount,
+  preset,
+  rangeStart,
+  rangeEnd,
+  calendarDays,
+}) {
+  return (
+    <div className="space-y-8 pt-2">
+      <section className="space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-gwsa-text-muted">
+          Donations
+        </h3>
+        <DonationsTab
+          embedded
+          data={donationsData}
+          totalDonations={totalDonations}
+          avgDaily={donationAvgDaily}
+          peakDay={donationPeakDay}
+          lowestDay={donationLowestDay}
+          preset={preset}
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+          calendarDays={calendarDays}
+          loadError={donationsError}
+        />
+      </section>
+      {includeDoorCount ? (
+        <section className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-gwsa-text-muted">
+            Door Count
+          </h3>
+          <DoorCountTab
+            embedded
+            data={doorCountData}
+            totalVisits={totalVisits}
+            avgDaily={doorAvgDaily}
+            peakDay={doorPeakDay}
+            lowestDay={doorLowestDay}
+            preset={preset}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            calendarDays={calendarDays}
+            loadError={doorCountError}
+          />
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
 function DonationsTab({
   data,
   totalDonations,
@@ -611,6 +748,7 @@ function DonationsTab({
   rangeEnd,
   calendarDays,
   loadError,
+  embedded = false,
 }) {
   const periodLine = `${preset} · ${formatDateShort(rangeStart)} – ${formatDateShort(rangeEnd)}`;
   const fmtDay = (raw) =>
@@ -627,7 +765,7 @@ function DonationsTab({
   }));
 
   return (
-    <div className="space-y-4 pt-2">
+    <div className={`space-y-4 ${embedded ? '' : 'pt-2'}`}>
       {loadError ? (
         <div className="rounded-lg border border-gwsa-red/40 bg-gwsa-red/10 px-3 py-2 text-xs text-gwsa-red">
           {loadError}
@@ -700,6 +838,7 @@ function DoorCountTab({
   rangeEnd,
   calendarDays,
   loadError,
+  embedded = false,
 }) {
   const periodLine = `${preset} · ${formatDateShort(rangeStart)} – ${formatDateShort(rangeEnd)}`;
   const fmtDay = (raw) =>
@@ -717,7 +856,7 @@ function DoorCountTab({
   }));
 
   return (
-    <div className="space-y-4 pt-2">
+    <div className={`space-y-4 ${embedded ? '' : 'pt-2'}`}>
       {loadError ? (
         <div className="rounded-lg border border-gwsa-red/40 bg-gwsa-red/10 px-3 py-2 text-xs text-gwsa-red">
           {loadError}
@@ -853,22 +992,30 @@ function TrendsTab({ data, preset, financialsData, doorCountData, donationsData 
         return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
       })()
     : (() => {
-        // Monthly trends: aggregate daily donation rows into each calendar month (YYYY-MM-01).
+        // Monthly trends: prefer Donations from API (SQL monthly rollup); fallback to daily rows.
         const donationsByMonth = new Map();
         donationsData.forEach((row) => {
-          const dt = row.DonationDate;
-          if (!dt) return;
-          const monthKey = `${String(dt).slice(0, 7)}-01`;
-          donationsByMonth.set(monthKey, (donationsByMonth.get(monthKey) || 0) + Number(row.Donations || 0));
+          const monthKey = toMonthKey(row.DonationDate);
+          if (!monthKey) return;
+          donationsByMonth.set(
+            monthKey,
+            (donationsByMonth.get(monthKey) || 0) + Number(row.Donations || 0),
+          );
         });
         return data.map((d) => {
-          const monthKey = String(d.PeriodMonth).slice(0, 10);
+          const monthKey = toMonthKey(d.PeriodMonth);
+          const donationsValue =
+            d.Donations != null && d.Donations !== ''
+              ? Number(d.Donations)
+              : (monthKey ? donationsByMonth.get(monthKey) : null);
           return {
             date: d.PeriodMonth,
             ...Object.fromEntries(
               activeMetrics.map((k) => [
                 k,
-                k === 'Donations' ? (donationsByMonth.get(monthKey) ?? 0) : d[k],
+                k === 'Donations'
+                  ? (donationsValue ?? 0)
+                  : d[k],
               ]),
             ),
           };

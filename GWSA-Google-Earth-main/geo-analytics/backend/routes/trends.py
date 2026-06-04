@@ -26,10 +26,17 @@ def get_trends(store_id):
         return jsonify(error=err.messages), 400
 
     months = params['months']
+    start = params.get('start')
+    end = params.get('end')
+    start_iso = start.isoformat() if start else None
+    end_iso = end.isoformat() if end else None
 
     try:
         from db.queries import get_trends as db_get_trends
-        data = db_get_trends(store_id, months)
+        if start_iso and end_iso:
+            data = db_get_trends(store_id, months=months, start_date=start_iso, end_date=end_iso)
+        else:
+            data = db_get_trends(store_id, months=months)
         return jsonify(data)
     except Exception as e:
         return jsonify(error=str(e)), 500

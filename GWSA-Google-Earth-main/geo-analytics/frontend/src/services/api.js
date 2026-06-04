@@ -75,8 +75,16 @@ export const fetchBudgetVsActual = (storeId, start, end, { grain = 'day' } = {})
     params: { start, end, grain },
   });
 
-export const fetchTrends = (storeId, months = 12) =>
-  api.get(`/trends/${encodeURIComponent(storeId)}`, { params: { months } });
+/** Pass { start, end } to align trends with the date picker; otherwise { months }. */
+export const fetchTrends = (storeId, { months = 12, start, end } = {}) =>
+  api.get(`/trends/${encodeURIComponent(storeId)}`, {
+    params: start && end ? { start, end } : { months },
+  });
+
+export const fetchKeyMetrics = (storeId, { asOf } = {}) =>
+  api.get(`/key-metrics/${encodeURIComponent(storeId)}`, {
+    params: asOf ? { as_of: asOf } : {},
+  });
 
 export const sendChatMessage = (message, storeContext, history, sessionState = null) =>
   api.post(

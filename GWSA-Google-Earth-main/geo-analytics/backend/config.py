@@ -73,9 +73,13 @@ class Config:
     # Donations: daily donation rows, e.g. JS_API.dbo.tbl_Donation. Storeid matches app/location id directly.
     SQL_DONATIONS_OBJECT = os.environ.get('SQL_DONATIONS_OBJECT', 'JS_API.dbo.tbl_Donation').strip()
     SQL_DONATIONS_COL_DATE = os.environ.get('SQL_DONATIONS_COL_DATE', 'DonDate').strip()
-    # Effective donation amount/count (already reflects any OverrideAmt). Use this, not NativeCount.
+    # Primary donation column; queries also fall back to OverrideAmt then NativeCount when this is 0/null.
     SQL_DONATIONS_COL_AMOUNT = os.environ.get('SQL_DONATIONS_COL_AMOUNT', 'DonationAmt').strip()
     SQL_DONATIONS_COL_STORE = os.environ.get('SQL_DONATIONS_COL_STORE', 'Storeid').strip()
+    # Store detail (square footage, tier): JS_API.dbo.tbl_Locations
+    SQL_LOCATIONS_DETAIL_OBJECT = os.environ.get(
+        'SQL_LOCATIONS_DETAIL_OBJECT', 'JS_API.dbo.tbl_Locations'
+    ).strip()
     # Door counts: three-part name, e.g. PeopleCounter.dbo.PCounter (see SQL_DOOR_COUNT_COL_*).
     SQL_DOOR_COUNT_OBJECT = os.environ.get('SQL_DOOR_COUNT_OBJECT', 'PeopleCounter.dbo.PCounter').strip()
     # PCounter uses [Date] (daily grain is rolled up from hourly rows in SQL).

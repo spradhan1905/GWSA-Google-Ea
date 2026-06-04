@@ -38,7 +38,13 @@ class BudgetVsActualQuerySchema(Schema):
     grain = fields.Str(load_default='day', validate=validate.OneOf(['day', 'month']))
 
 class TrendsQuerySchema(Schema):
-    months = fields.Int(load_default=12, validate=validate.Range(min=1, max=60))
+    months = fields.Int(load_default=12, validate=validate.Range(min=1, max=240))
+    start = fields.Date(required=False, allow_none=True)
+    end = fields.Date(required=False, allow_none=True)
+
+class KeyMetricsQuerySchema(Schema):
+    """Optional as-of date for YTD sales window (defaults to today)."""
+    as_of = fields.Date(required=False, allow_none=True)
 
 class ChatRequestSchema(Schema):
     message              = fields.Str(required=True, validate=validate.Length(min=1, max=2000))

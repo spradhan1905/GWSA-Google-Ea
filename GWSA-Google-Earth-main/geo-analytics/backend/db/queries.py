@@ -728,6 +728,139 @@ def _validated_donations_object() -> str:
     return name
 
 
+def _donations_effective_value_sql(alias: str = "d") -> str:
+    """
+    Per-row donation value: DonationAmt when present, else OverrideAmt, else NativeCount.
+    Newer warehouse rows often populate NativeCount while DonationAmt stays 0.
+    """
+    acol = _bracketed_col(Config.SQL_DONATIONS_COL_AMOUNT, "SQL_DONATIONS_COL_AMOUNT")
+    a = alias
+    return f"""COALESCE(
+        NULLIF(CAST({a}.{acol} AS DECIMAL(18, 4)), 0),
+        NULLIF(CAST({a}.[OverrideAmt] AS DECIMAL(18, 4)), 0),
+        CAST(ISNULL({a}.[NativeCount], 0) AS DECIMAL(18, 4))
+    )"""
+
+
+def _donations_sum_sql(alias: str = "d") -> str:
+    """SUM of effective donation values for GROUP BY queries."""
+    return (
+        f"CAST(SUM({_donations_effective_value_sql(alias)}) AS DECIMAL(18, 2))"
+    )
+
+
+def _default_trend_daily_window(months: int) -> Tuple[str, str]:
+    """Inclusive daily date span matching get_trends month window (through current month)."""
+    months = max(1, int(months))
+    today = date.today()
+    end_month = date(today.year, today.month, 1)
+    y, m = end_month.year, end_month.month - (months - 1)
+    while m <= 0:
+        m += 12
+        y -= 1
+    start_month = date(y, m, 1)
+    if end_month.month == 12:
+        end_daily = date(end_month.year, 12, 31)
+    else:
+        end_daily = date(end_month.year, end_month.month + 1, 1) - timedelta(days=1)
+    return start_month.isoformat(), end_daily.isoformat()
+
+
+def _resolve_trend_daily_window(
+    months: int,
+    start_date: Optional[str],
+    end_date: Optional[str],
+) -> Tuple[str, str]:
+    if start_date and end_date:
+        return start_date, end_date
+    return _default_trend_daily_window(months)
+
+
+def _validated_locations_detail_object() -> str:
+    """Store metadata: JS_API.dbo.tbl_Locations (square footage, tier, etc.)."""
+    name = (Config.SQL_LOCATIONS_DETAIL_OBJECT or "").strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
+        raise ValueError("SQL_LOCATIONS_DETAIL_OBJECT must be set (e.g. JS_API.dbo.tbl_Locations)")
+    return name
+
+
+def get_location_detail(store_id: str) -> Optional[dict]:
+    """One row from tbl_Locations for a store id (SalesSqrFt, Tier, etc.)."""
+    sid = (store_id or "").strip()
+    if not sid or _is_consolidated_location(sid):
+        return None
+    obj = _validated_locations_detail_object()
+    sql = f"""
+        SELECT TOP 1
+            LocName,
+            LocAdd,
+            LocType,
+            Storeid,
+            Tier,
+            TtlSqrFt,
+            SalesSqrFt,
+            ProdSqrFt,
+            DateOpen,
+            DateClosed
+        FROM {obj}
+        WHERE LTRIM(RTRIM(CAST(Storeid AS NVARCHAR(50)))) = LTRIM(RTRIM(?))
+    """
+    rows = _execute_query(sql, (sid,))
+    return rows[0] if rows else None
+
+
+def _ytd_window(as_of: str) -> tuple[str, str, int]:
+    """Calendar YTD through as_of (inclusive day count)."""
+    from datetime import date
+
+    end = date.fromisoformat(as_of[:10])
+    start = date(end.year, 1, 1)
+    days = (end - start).days + 1
+    return start.isoformat(), end.isoformat(), max(1, days)
+
+
+def get_key_metrics(store_id: str, as_of: Optional[str] = None) -> dict:
+    """
+    Key Metrics tab: SalesSqrFt, annualized sales per sq ft, lease status.
+    Sales per sq ft = ((YTD core sales / YTD days) / SalesSqrFt) * 365 (annualizedAvg).
+    """
+    from datetime import date
+    from db.store_lease_status import lease_status_for_store
+
+    sid = (store_id or "").strip()
+    if not sid or _is_consolidated_location(sid):
+        return {"error": "Key metrics are not available for this location."}
+
+    as_of_iso = (as_of or date.today().isoformat())[:10]
+    loc = get_location_detail(sid)
+    ytd_start, ytd_end, ytd_days = _ytd_window(as_of_iso)
+    daily = get_financials(sid, ytd_start, ytd_end, this_month=True)
+    ytd_sales = sum(_coerce_number(r.get("NetRevenue")) for r in daily)
+
+    sales_sqft = None
+    if loc and loc.get("SalesSqrFt") is not None:
+        try:
+            sales_sqft = float(loc["SalesSqrFt"])
+        except (TypeError, ValueError):
+            sales_sqft = None
+
+    annualized_spsf = None
+    if sales_sqft and sales_sqft > 0 and ytd_days > 0:
+        annualized_spsf = round(((ytd_sales / ytd_days) / sales_sqft) * 365, 2)
+
+    lease = lease_status_for_store(sid)
+    return {
+        "storeId": sid,
+        "asOf": as_of_iso,
+        "location": loc,
+        "salesSquareFt": sales_sqft,
+        "ytdCoreSales": round(ytd_sales, 2),
+        "ytdDays": ytd_days,
+        "salesPerSqFtAnnualized": annualized_spsf,
+        "leaseStatus": lease,
+    }
+
+
 def get_donations(store_id: str, start_date: str, end_date: str) -> list:
     """
     Daily donation totals from tbl_Donation: SUM([DonationAmt]) per calendar day for one store.
@@ -736,12 +869,9 @@ def get_donations(store_id: str, start_date: str, end_date: str) -> list:
     """
     obj = _validated_donations_object()
     dcol = _bracketed_col(Config.SQL_DONATIONS_COL_DATE, "SQL_DONATIONS_COL_DATE")
-    acol = _bracketed_col(Config.SQL_DONATIONS_COL_AMOUNT, "SQL_DONATIONS_COL_AMOUNT")
     scol = _bracketed_col(Config.SQL_DONATIONS_COL_STORE, "SQL_DONATIONS_COL_STORE")
 
-    sum_amt = (
-        f"CAST(SUM(ISNULL(CAST(d.{acol} AS DECIMAL(18, 2)), 0)) AS DECIMAL(18, 2)) AS Donations"
-    )
+    sum_amt = f"{_donations_sum_sql('d')} AS Donations"
     date_expr = f"CAST(d.{dcol} AS DATE)"
 
     if _is_consolidated_location(store_id):
@@ -774,12 +904,9 @@ def _donations_all_stores_daily(start_date: str, end_date: str) -> list:
     """ONE query: daily donation totals for every store (Storeid + date)."""
     obj = _validated_donations_object()
     dcol = _bracketed_col(Config.SQL_DONATIONS_COL_DATE, "SQL_DONATIONS_COL_DATE")
-    acol = _bracketed_col(Config.SQL_DONATIONS_COL_AMOUNT, "SQL_DONATIONS_COL_AMOUNT")
     scol = _bracketed_col(Config.SQL_DONATIONS_COL_STORE, "SQL_DONATIONS_COL_STORE")
     date_expr = f"CAST(d.{dcol} AS DATE)"
-    sum_amt = (
-        f"CAST(SUM(ISNULL(CAST(d.{acol} AS DECIMAL(18, 2)), 0)) AS DECIMAL(18, 2)) AS Donations"
-    )
+    sum_amt = f"{_donations_sum_sql('d')} AS Donations"
     sql = f"""
         SELECT
             LTRIM(RTRIM(CAST(d.{scol} AS NVARCHAR(50)))) AS StoreId,
@@ -1054,14 +1181,87 @@ def get_door_count(store_id: str, start_date: str, end_date: str) -> list:
     return _execute_query(sql, params)
 
 
-def get_trends(store_id: str, months: int = 12) -> list:
-    """Trend tab: monthly rollup from RetailStoreMonthlyFinancialSummary + door counts."""
+def _trends_month_filters(
+    months: int = 12,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> tuple[str, str, tuple]:
+    """Month window for trend rollups; uses explicit range when provided."""
+    if start_date and end_date:
+        month_window_start = (
+            "DATEFROMPARTS(d.[Year], d.[Month], 1) >= "
+            "DATEFROMPARTS(YEAR(CAST(? AS DATE)), MONTH(CAST(? AS DATE)), 1)"
+        )
+        month_window_end = (
+            "DATEFROMPARTS(d.[Year], d.[Month], 1) <= "
+            "DATEFROMPARTS(YEAR(CAST(? AS DATE)), MONTH(CAST(? AS DATE)), 1)"
+        )
+        return month_window_start, month_window_end, (start_date, end_date)
+    month_window_start = (
+        "DATEFROMPARTS(d.[Year], d.[Month], 1) >= "
+        "DATEADD(MONTH, 1 - ?, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))"
+    )
+    month_window_end = (
+        "DATEFROMPARTS(d.[Year], d.[Month], 1) <= "
+        "DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)"
+    )
+    return month_window_start, month_window_end, (max(1, int(months)),)
+
+
+def _donations_monthly_join_sql(
+    store_id: str,
+    daily_start: str,
+    daily_end: str,
+) -> tuple:
+    """Monthly donation totals for trends, scoped to the same daily window as the chart."""
+    obj = _validated_donations_object()
+    dcol = _bracketed_col(Config.SQL_DONATIONS_COL_DATE, "SQL_DONATIONS_COL_DATE")
+    scol = _bracketed_col(Config.SQL_DONATIONS_COL_STORE, "SQL_DONATIONS_COL_STORE")
+    date_expr = f"CAST(d.{dcol} AS DATE)"
+    sum_amt = _donations_sum_sql("d")
+    date_filter = f" AND {date_expr} >= CAST(? AS DATE) AND {date_expr} <= CAST(? AS DATE) "
+
+    if _is_consolidated_location(store_id):
+        inner_where = f" WHERE 1 = 1 {date_filter} "
+        params: tuple = (daily_start, daily_end)
+    else:
+        sid = (store_id or "").strip()
+        store_match = f"LTRIM(RTRIM(CAST(d.{scol} AS NVARCHAR(50)))) = LTRIM(RTRIM(?))"
+        inner_where = f" WHERE {store_match} {date_filter} "
+        params = (sid, daily_start, daily_end)
+
+    join = f"""
+        LEFT JOIN (
+            SELECT
+                DATEFROMPARTS(YEAR({date_expr}), MONTH({date_expr}), 1) AS MonthStart,
+                {sum_amt} AS TotalDonations
+            FROM {obj} AS d
+            {inner_where}
+            GROUP BY YEAR({date_expr}), MONTH({date_expr})
+        ) dn ON agg.PeriodMonth = dn.MonthStart
+    """
+    return join, params
+
+
+def get_trends(
+    store_id: str,
+    months: int = 12,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> list:
+    """Trend tab: monthly financials + door counts + donations (all aligned to the same window)."""
+    daily_start, daily_end = _resolve_trend_daily_window(months, start_date, end_date)
+
     ids = _resolve_pcounter_location_ids(store_id)
     tbl = _validated_door_count_object()
     dcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_DATE, "SQL_DOOR_COUNT_COL_DATE")
     vcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_VISITS, "SQL_DOOR_COUNT_COL_VISITS")
     lcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_LOCATION, "SQL_DOOR_COUNT_COL_LOCATION")
     obj = _validated_retail_monthly_financial_object()
+    door_date_filter = (
+        f" AND CAST({dcol} AS DATE) >= CAST(? AS DATE) AND CAST({dcol} AS DATE) <= CAST(? AS DATE) "
+    )
+    door_date_params = (daily_start, daily_end)
 
     if ids:
         ph = ",".join("?" * len(ids))
@@ -1074,12 +1274,13 @@ def get_trends(store_id: str, months: int = 12) -> list:
                 SELECT CAST({dcol} AS DATE) AS CountDate, SUM({vcol}) AS DonorVisits
                 FROM {tbl}
                 WHERE {lcol} IN ({ph})
+                {door_date_filter}
                 GROUP BY CAST({dcol} AS DATE)
             ) d
             GROUP BY DATEFROMPARTS(YEAR(CountDate), MONTH(CountDate), 1)
         ) dc ON agg.PeriodMonth = dc.MonthStart
         """
-        door_params = tuple(ids)
+        door_params = tuple(ids) + door_date_params
     else:
         door_join = """
         LEFT JOIN (
@@ -1087,6 +1288,10 @@ def get_trends(store_id: str, months: int = 12) -> list:
         ) dc ON agg.PeriodMonth = dc.MonthStart
         """
         door_params = ()
+
+    donations_join, donations_params = _donations_monthly_join_sql(
+        store_id, daily_start, daily_end
+    )
 
     agg_select = """
                 DATEFROMPARTS(d.[Year], d.[Month], 1) AS PeriodMonth,
@@ -1103,15 +1308,8 @@ def get_trends(store_id: str, months: int = 12) -> list:
                 ) AS ExpenseRatio
     """
 
-    # Use completed calendar months only (exclude current month).
-    # Example in April with months=3 -> Jan, Feb, Mar.
-    month_window_start = (
-        "DATEFROMPARTS(d.[Year], d.[Month], 1) >= "
-        "DATEADD(MONTH, 1 - ?, DATEFROMPARTS(YEAR(EOMONTH(GETDATE(), -1)), MONTH(EOMONTH(GETDATE(), -1)), 1))"
-    )
-    month_window_end = (
-        "DATEFROMPARTS(d.[Year], d.[Month], 1) <= "
-        "DATEFROMPARTS(YEAR(EOMONTH(GETDATE(), -1)), MONTH(EOMONTH(GETDATE(), -1)), 1)"
+    month_window_start, month_window_end, window_params = _trends_month_filters(
+        months, start_date, end_date
     )
 
     if _is_consolidated_location(store_id):
@@ -1123,7 +1321,8 @@ def get_trends(store_id: str, months: int = 12) -> list:
                 agg.ExpenseRatio,
                 CAST(0 AS DECIMAL(18, 2)) AS DonatedGoodsRev,
                 CAST(0 AS DECIMAL(18, 2)) AS RetailRevenue,
-                ISNULL(dc.TotalVisits, 0) AS DoorCount
+                ISNULL(dc.TotalVisits, 0) AS DoorCount,
+                ISNULL(dn.TotalDonations, 0) AS Donations
             FROM (
                 SELECT
                     {agg_select}
@@ -1133,9 +1332,10 @@ def get_trends(store_id: str, months: int = 12) -> list:
                 GROUP BY d.[Year], d.[Month]
             ) AS agg
             {door_join}
+            {donations_join}
             ORDER BY agg.PeriodMonth
         """
-        return _execute_query(sql, (months,) + door_params)
+        return _execute_query(sql, window_params + door_params + donations_params)
 
     if Config.LOCATIONS_SOURCE == "static":
         from db.static_locations import get_static_store_meta, sales_unit_name_for_store
@@ -1155,7 +1355,8 @@ def get_trends(store_id: str, months: int = 12) -> list:
                 agg.ExpenseRatio,
                 CAST(0 AS DECIMAL(18, 2)) AS DonatedGoodsRev,
                 CAST(0 AS DECIMAL(18, 2)) AS RetailRevenue,
-                ISNULL(dc.TotalVisits, 0) AS DoorCount
+                ISNULL(dc.TotalVisits, 0) AS DoorCount,
+                ISNULL(dn.TotalDonations, 0) AS Donations
             FROM (
                 SELECT
                     {agg_select}
@@ -1166,9 +1367,10 @@ def get_trends(store_id: str, months: int = 12) -> list:
                 GROUP BY d.[Year], d.[Month]
             ) AS agg
             {door_join}
+            {donations_join}
             ORDER BY agg.PeriodMonth
         """
-        return _execute_query(sql, (months, *unit_params) + door_params)
+        return _execute_query(sql, window_params + unit_params + door_params + donations_params)
 
     loc_tbl = _validated_locations_table()
     sid = (store_id or "").strip()
@@ -1181,7 +1383,8 @@ def get_trends(store_id: str, months: int = 12) -> list:
             agg.ExpenseRatio,
             CAST(0 AS DECIMAL(18, 2)) AS DonatedGoodsRev,
             CAST(0 AS DECIMAL(18, 2)) AS RetailRevenue,
-            ISNULL(dc.TotalVisits, 0) AS DoorCount
+            ISNULL(dc.TotalVisits, 0) AS DoorCount,
+            ISNULL(dn.TotalDonations, 0) AS Donations
         FROM (
             SELECT
                 {agg_select}
@@ -1194,9 +1397,10 @@ def get_trends(store_id: str, months: int = 12) -> list:
             GROUP BY d.[Year], d.[Month]
         ) AS agg
         {door_join}
+        {donations_join}
         ORDER BY agg.PeriodMonth
     """
-    return _execute_query(sql, (sid, months) + door_params)
+    return _execute_query(sql, (sid,) + window_params + door_params + donations_params)
 
 
 def get_donor_addresses(store_id: str) -> list:
@@ -2438,7 +2642,7 @@ def trend_summary_for_chat(
     months: int = 12,
 ) -> dict:
     """Thin wrapper around get_trends for grounded chat payloads."""
-    rows = get_trends(store_id, max(1, min(int(months), 36)))
+    rows = get_trends(store_id, max(1, min(int(months), 240)))
     loc = resolve_location_reference(store_id)
     return {
         "intent": "trend_summary",
@@ -2451,7 +2655,7 @@ def trend_summary_for_chat(
             "financial": _validated_retail_monthly_financial_object(),
             "door": _validated_door_count_object(),
             "grain": "month",
-            "note": "Completed calendar months ending last closed month.",
+            "note": "Monthly rollup for the requested month span (includes current month when in range).",
         },
     }
 

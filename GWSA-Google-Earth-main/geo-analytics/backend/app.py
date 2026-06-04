@@ -56,6 +56,7 @@ def create_app():
     from routes.donor_addresses import donor_addresses_bp
     from routes.budget_vs_actual import budget_vs_actual_bp
     from routes.donations import donations_bp
+    from routes.key_metrics import key_metrics_bp
 
     app.register_blueprint(locations_bp)
     app.register_blueprint(financials_bp)
@@ -65,6 +66,7 @@ def create_app():
     app.register_blueprint(donor_addresses_bp)
     app.register_blueprint(budget_vs_actual_bp)
     app.register_blueprint(donations_bp)
+    app.register_blueprint(key_metrics_bp)
 
     # ─── Error Handlers ───────────────────────
     @app.errorhandler(429)

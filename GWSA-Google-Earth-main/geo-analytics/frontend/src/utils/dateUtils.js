@@ -25,3 +25,17 @@ export function formatDateShort(iso) {
   const d = new Date(`${iso}T12:00:00`);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+/** Normalize any API date to the first day of its calendar month (YYYY-MM-01). */
+export function toMonthKey(dateLike) {
+  if (dateLike == null || dateLike === '') return null;
+  const s = String(dateLike);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return `${s.slice(0, 7)}-01`;
+  }
+  const d = new Date(s.includes('T') ? s : `${s}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01`;
+}
