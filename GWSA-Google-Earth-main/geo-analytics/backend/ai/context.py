@@ -83,7 +83,6 @@ def build_chart_envelope(intent: str, plan: dict, analytics_data: Optional[dict]
         "compare_locations",
         "compare_periods",
         "trend_summary",
-        "category_breakdown",
     }:
         return None
     from ai.followups import chart_config_for_intent
@@ -94,7 +93,18 @@ def build_chart_envelope(intent: str, plan: dict, analytics_data: Optional[dict]
     rows = chart_rows_for_payload(intent, analytics_data)
     if not rows:
         return None
+    if intent == "category_breakdown":
+        valid = [
+            r for r in rows
+            if float(r.get("revenue") or r.get("metric_value") or 0) > 0
+            and str(r.get("category") or r.get("label") or "").strip()
+        ]
+        if len(valid) < 2:
+            return None
+        rows = valid
     metric = str(plan.get("metric") or "metric").replace("_", " ").title()
+    if intent == "category_breakdown":
+        metric = "Core sales"
     tf = (analytics_data.get("timeframe") or plan.get("timeframe") or {}) if isinstance(analytics_data, dict) else {}
     label = str(tf.get("label") or "")
     title_parts = [metric, intent.replace("_", " ").title()]

@@ -871,14 +871,76 @@ def get_key_metrics(store_id: str, as_of: Optional[str] = None) -> dict:
     }
 
 
-def _category_label_sql() -> str:
-    """Prefer [Category], fall back to [RevenueType] for grouping."""
+def _sub_category_label_sql() -> str:
+    """Retail subcategory bucket from TotalCoreTableFinal.[Sub_Category] (Books, Wares, Rack Sales, …)."""
     return (
         "COALESCE("
-        "NULLIF(LTRIM(RTRIM(CAST(d.[Category] AS NVARCHAR(200)))), N''), "
-        "NULLIF(LTRIM(RTRIM(CAST(d.[RevenueType] AS NVARCHAR(200)))), N''), "
+        "NULLIF(LTRIM(RTRIM(CAST(d.[Sub_Category] AS NVARCHAR(200)))), N''), "
         "N'(Unlabeled)')"
     )
+
+
+def _sub_category_group_by_sql() -> str:
+    return "LTRIM(RTRIM(CAST(d.[Sub_Category] AS NVARCHAR(200))))"
+
+
+def _category_label_sql() -> str:
+    """Legacy Category/RevenueType label (kept for non-subcategory rollups)."""
+    cat = "NULLIF(LTRIM(RTRIM(CAST(d.[Category] AS NVARCHAR(200)))), N'')"
+    rt = "NULLIF(LTRIM(RTRIM(CAST(d.[RevenueType] AS NVARCHAR(200)))), N'')"
+    return (
+        f"CASE "
+        f"WHEN {cat} IS NOT NULL AND {rt} IS NOT NULL "
+        f"     AND {cat} COLLATE Latin1_General_CI_AI <> {rt} COLLATE Latin1_General_CI_AI "
+        f"  THEN {cat} + N' — ' + {rt} "
+        f"ELSE COALESCE({rt}, {cat}, N'(Unlabeled)') "
+        f"END"
+    )
+
+
+def _category_group_by_sql() -> str:
+    return (
+        "LTRIM(RTRIM(CAST(d.[Category] AS NVARCHAR(200)))), "
+        "LTRIM(RTRIM(CAST(d.[RevenueType] AS NVARCHAR(200))))"
+    )
+
+
+def _is_single_core_sales_bucket(rows: list) -> bool:
+    """True when TotalCore returns one Sub_Category line only."""
+    labels = {
+        str(r.get("RevenueCategory") or "").strip().lower()
+        for r in (rows or [])
+        if r
+    }
+    labels.discard("")
+    labels.discard("(unlabeled)")
+    return len(labels) <= 1
+
+
+def _is_retail_core_category_label(label: str) -> bool:
+    """Drop GL-style buckets that are not retail core-sales subcategories."""
+    t = (label or "").strip().lower()
+    if not t or t == "(unlabeled)":
+        return False
+    non_retail = (
+        "liabilit",
+        "asset",
+        "payable",
+        "receivable",
+        "debt",
+        "equity",
+        "expense",
+        "payroll",
+        "depreciation",
+        "amortization",
+        "inventory adjustment",
+        "cost of goods",
+    )
+    return not any(x in t for x in non_retail)
+
+
+def _filter_retail_core_category_rows(rows: list) -> list:
+    return [r for r in (rows or []) if _is_retail_core_category_label(str(r.get("RevenueCategory") or ""))]
 
 
 def _gp_category_label_sql() -> str:
@@ -961,28 +1023,56 @@ def get_revenue_by_gp_category(store_id: str, start_date: str, end_date: str) ->
     return _execute_query(sql, (*unit_params, start_date, end_date))
 
 
-def _category_rows_for_store(store_id: str, start_date: str, end_date: str) -> Tuple[list, dict]:
-    """Prefer GP line categories when multiple buckets exist; else TotalCore Category/RevenueType."""
-    gp_rows = get_revenue_by_gp_category(store_id, start_date, end_date)
-    distinct_gp = len({str(r.get("RevenueCategory") or "").strip() for r in gp_rows if r})
-    if distinct_gp >= 2:
+def _category_rows_for_store(
+    store_id: str,
+    start_date: str,
+    end_date: str,
+    *,
+    source: str = "total_core",
+    core_sales_only: bool = True,
+) -> Tuple[list, dict]:
+    """
+    Category/subcategory rows for chat — **TotalCoreTableFinal only** by default
+    (same table as This Month core sales). Optional gp_line for explicit POS requests only.
+    """
+    if source == "gp_line":
+        gp_rows = get_revenue_by_gp_category(store_id, start_date, end_date)
         return gp_rows, {
             "name": _validated_sales_line_object(),
             "grain": "gp_sales_category",
             "field": "SalesCategoryFromGP",
         }
-    core_rows = get_revenue_by_category(store_id, start_date, end_date)
-    return core_rows, {
+
+    core_rows = _filter_retail_core_category_rows(
+        get_revenue_by_category(store_id, start_date, end_date, core_sales_only=core_sales_only)
+    )
+    meta = {
         "name": _validated_this_month_revenue_object(),
-        "grain": "total_core_category",
-        "field": "Category/RevenueType",
+        "grain": "total_core_subcategory",
+        "field": "Sub_Category",
+        "table": _validated_this_month_revenue_object(),
+        "core_sales_filter": core_sales_only,
     }
+    if _is_single_core_sales_bucket(core_rows):
+        meta["single_bucket"] = True
+        meta["note"] = (
+            "TotalCoreTableFinal has only one retail category bucket for this store and month. "
+            "Finer subcategories are not loaded in that table for this period."
+        )
+    return core_rows, meta
 
 
-def get_revenue_by_category(store_id: str, start_date: str, end_date: str) -> list:
+def get_revenue_by_category(
+    store_id: str,
+    start_date: str,
+    end_date: str,
+    *,
+    core_sales_only: bool = True,
+) -> list:
     """
-    Revenue grouped by Category/RevenueType from TotalCoreTableFinal (all categories).
-    Returns rows: RevenueCategory, Revenue.
+    Subcategory breakdown from TotalCoreTableFinal.[Sub_Category] for any calendar month/range.
+    When core_sales_only is True (default), applies the same Core Sales filter as This Month MTD.
+    Returns rows: RevenueCategory (subcategory name), Revenue.
     """
     from db.static_locations import get_static_store_meta, sales_unit_name_for_store
 
@@ -994,47 +1084,55 @@ def get_revenue_by_category(store_id: str, start_date: str, end_date: str) -> li
         return []
 
     obj = _validated_this_month_revenue_object()
-    cat_expr = _category_label_sql()
+    cat_expr = _sub_category_label_sql()
+    group_by = _sub_category_group_by_sql()
     sum_rev = (
         "CAST(SUM(ISNULL(CAST(d.[Revenue] AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS Revenue"
+    )
+    core_sql, core_params = (
+        _total_core_category_filter_sql() if core_sales_only else ("", ())
     )
 
     if Config.LOCATIONS_SOURCE == "static":
         sold = meta.get("sold_store_id") if meta else None
         ssu = meta.get("sales_store_unit") if meta else None
         uid = TOTAL_CORE_UNIT_LOCATION_ID_SQL
-        params: tuple = ()
-        where = f"WHERE {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
-        params = (start_date, end_date)
+        unit = sales_unit_name_for_store(store_id)
 
-        if sold is not None:
-            where = f"WHERE {uid} = ? AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
-            params = (int(sold), start_date, end_date)
+        if unit:
+            unit_sql, unit_params = _sales_unit_name_predicate_sql(unit)
+            where = (
+                f"WHERE 1 = 1 {unit_sql} {core_sql} "
+                f"AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
+            )
+            params = (*unit_params, *core_params, start_date, end_date)
+        elif sold is not None:
+            where = (
+                f"WHERE {uid} = ? {core_sql} "
+                f"AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
+            )
+            params = (int(sold), *core_params, start_date, end_date)
         elif (store_id or "").strip().isdigit():
-            where = f"WHERE {uid} = ? AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
-            params = (int(store_id), start_date, end_date)
+            where = (
+                f"WHERE {uid} = ? {core_sql} "
+                f"AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
+            )
+            params = (int(store_id), *core_params, start_date, end_date)
         elif ssu is not None and str(ssu).strip():
             where = (
                 "WHERE CHARINDEX(LTRIM(RTRIM(?)), LTRIM(RTRIM(CAST(d.[Unit] AS NVARCHAR(200))))) > 0 "
+                f"{core_sql} "
                 f"AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
             )
-            params = (str(ssu).strip(), start_date, end_date)
+            params = (str(ssu).strip(), *core_params, start_date, end_date)
         else:
-            unit = sales_unit_name_for_store(store_id)
-            if not unit:
-                return []
-            unit_sql, unit_params = _sales_unit_name_predicate_sql(unit)
-            where = (
-                f"WHERE 1 = 1 {unit_sql} "
-                f"AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
-            )
-            params = (*unit_params, start_date, end_date)
+            return []
 
         sql = f"""
             SELECT {cat_expr} AS RevenueCategory, {sum_rev}
             FROM {obj} AS d
             {where}
-            GROUP BY {cat_expr}
+            GROUP BY {group_by}
             HAVING SUM(ISNULL(CAST(d.[Revenue] AS DECIMAL(18, 4)), 0)) <> 0
             ORDER BY Revenue DESC
         """
@@ -1050,11 +1148,12 @@ def get_revenue_by_category(store_id: str, start_date: str, end_date: str) -> li
         {join_pred}
         WHERE {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE)
           AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)
-        GROUP BY {cat_expr}
+          {core_sql}
+        GROUP BY {group_by}
         HAVING SUM(ISNULL(CAST(d.[Revenue] AS DECIMAL(18, 4)), 0)) <> 0
         ORDER BY Revenue DESC
     """
-    return _execute_query(sql, (sid, start_date, end_date))
+    return _execute_query(sql, (sid, start_date, end_date, *core_params))
 
 
 def compare_revenue_categories(
@@ -1069,13 +1168,16 @@ def compare_revenue_categories(
         if not ref:
             continue
         lid = str(ref.get("LocationID") or sid)
-        rows, src = _category_rows_for_store(lid, start_date, end_date)
-        total = sum(_coerce_number(r.get("Revenue")) for r in rows)
+        rows, src = _category_rows_for_store(lid, start_date, end_date, core_sales_only=True)
+        subtotal = sum(_coerce_number(r.get("Revenue")) for r in rows)
+        fin_rows = get_financials(lid, start_date, end_date, this_month=True)
+        core_total = round(_sum_field(fin_rows, "NetRevenue"), 2)
         stores_out.append(
             {
                 "location_id": lid,
                 "location_name": ref.get("LocationName"),
-                "total_revenue": round(total, 2),
+                "total_revenue": round(subtotal, 2),
+                "core_sales_total_mtd": core_total,
                 "category_source": src,
                 "categories": [
                     {
@@ -1097,6 +1199,8 @@ def compare_revenue_categories(
         "end": end_date,
         "stores": stores_out,
         "source": primary_src,
+        "data_table": _validated_this_month_revenue_object(),
+        "data_grain": "total_core_subcategory",
     }
 
 
@@ -3013,6 +3117,6 @@ def build_data_catalog() -> dict:
             "revenue_per_visit derived",
             "network correlation revenue vs visits (daily summed)",
             "trends: multi-month revenue, net income, expense ratio with door counts",
-            "category_breakdown: revenue by Category/RevenueType for one or more stores",
+            "category_breakdown: Sub_Category breakdown from TotalCoreTableFinal (sums to Core Sales for the period)",
         ],
     }

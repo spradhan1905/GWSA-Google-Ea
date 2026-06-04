@@ -6,6 +6,8 @@ from ai.planner_heuristic import (
     detect_metric,
     match_store_names,
     parse_timeframe,
+    wants_category_breakdown,
+    wants_core_sales_totalcore,
     wants_rank_time_periods,
     wants_store_best_day,
 )
@@ -41,6 +43,41 @@ from db.queries import (
     revenue_per_visit_by_store,
     trend_summary_for_chat,
 )
+
+
+def coerce_core_sales_category_plan(plan: dict, user_message: Optional[str]) -> dict:
+    """
+    Core sales / subcategory questions must use TotalCoreTableFinal (category_breakdown),
+    not RetailStoreMonthlyFinancialSummary (multi_metric_summary).
+    """
+    if not isinstance(plan, dict) or not user_message or not str(user_message).strip():
+        return plan
+    text = str(user_message).strip()
+    if not (wants_core_sales_totalcore(text) or wants_category_breakdown(text)):
+        return plan
+    tf = plan.get("timeframe")
+    if not isinstance(tf, dict) or not tf.get("start"):
+        tf = parse_timeframe(text)
+    if not isinstance(tf, dict) or not tf.get("start"):
+        return plan
+    if plan.get("intent") not in (
+        "multi_metric_summary",
+        "location_summary",
+        "unsupported",
+        "clarification_needed",
+    ):
+        return plan
+    p = dict(plan)
+    p["intent"] = "category_breakdown"
+    p["action"] = "category_breakdown"
+    p["metric"] = "revenue"
+    p["timeframe"] = tf
+    names = p.get("store_names") or []
+    if not names:
+        names = match_store_names(text, get_location_catalog(limit=80))[:3]
+    if names:
+        p["store_names"] = names[:3]
+    return p
 
 
 def coerce_plan_for_daily_peak_questions(plan: dict, user_message: Optional[str]) -> dict:
@@ -218,6 +255,10 @@ def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[st
                 vid = str(viewing_location["LocationID"])
                 if vid not in refs:
                     refs.append(vid)
+            if not refs and plan.get("trend_store_ref"):
+                loc_tr = resolve_location_reference(str(plan["trend_store_ref"]))
+                if loc_tr:
+                    refs.append(str(loc_tr["LocationID"]))
             if refs:
                 data = compare_revenue_categories(
                     refs,

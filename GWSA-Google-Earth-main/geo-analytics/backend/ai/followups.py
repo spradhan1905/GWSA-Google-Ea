@@ -173,7 +173,7 @@ def chart_config_for_intent(intent: str, metric: str) -> Optional[Dict[str, Any]
         "metric_breakdown": {"type": "horizontal_bar", "x_key": "metric_value", "y_key": "location_name"},
         "derived_metric": {"type": "horizontal_bar", "x_key": "metric_value", "y_key": "location_name"},
         "budget_vs_actual": {"type": "horizontal_bar", "x_key": "attainment_pct", "y_key": "location_name"},
-        "category_breakdown": {"type": "horizontal_bar", "x_key": "revenue", "y_key": "category"},
+        "category_breakdown": {"type": "bar", "x_key": "category", "y_key": "revenue"},
     }
     base = configs.get(intent)
     if not base:

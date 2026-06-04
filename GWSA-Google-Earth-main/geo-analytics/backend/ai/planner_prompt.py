@@ -31,7 +31,7 @@ Only classify and extract slots.
 - peak_store_daily_revenue: Which store logged the best single-day core revenue in a window?
 - trend_summary: Metric trend over time for a store (monthly buckets).
 - metric_breakdown: Break a metric down by store for a time period.
-- category_breakdown: Revenue by Category/RevenueType for one or more named stores (not by-store ranking).
+- category_breakdown: TotalCoreTableFinal Sub_Category breakdown (Books, Wares, …) for one or more stores and a named month; sums to Core Sales for that period.
 - multi_metric_summary: Multiple metrics for one store in a time period.
 - compare_periods: Compare two time periods (e.g., March vs February).
 - correlation_check: Relationship between door traffic and revenue.
@@ -126,8 +126,14 @@ User: Top 5 stores by revenue in March
 User: Compare DeZavala and Blanco for March revenue
 {"intent":"compare_locations","metrics":["revenue"],"grain":"month","scope":"location","locations":["DeZavala","Blanco"],"timeframe":{"type":"named_month","month_name":"March","year":2026,"n_days":null,"start":null,"end":null,"quarter":null},"timeframe_b":null,"limit":null,"sort_direction":"desc","requires_chart":true,"confidence":"high"}
 
+User: How was the Marbach store's core sales in the month of March 2026?
+{"intent":"category_breakdown","metrics":["revenue"],"grain":"month","scope":"location","locations":["Marbach"],"timeframe":{"type":"named_month","month_name":"March","year":2026,"n_days":null,"start":null,"end":null,"quarter":null},"timeframe_b":null,"limit":null,"sort_direction":"desc","requires_chart":false,"confidence":"high"}
+
+User: Show me the breakdown by subcategories for Bandera in April 2026
+{"intent":"category_breakdown","metrics":["revenue"],"grain":"month","scope":"location","locations":["Bandera"],"timeframe":{"type":"named_month","month_name":"April","year":2026,"n_days":null,"start":null,"end":null,"quarter":null},"timeframe_b":null,"limit":null,"sort_direction":"desc","requires_chart":false,"confidence":"high"}
+
 User: Compare core sales for Bandera and Culebra for April. Give me a full overview.
-{"intent":"compare_locations","metrics":["revenue"],"grain":"month","scope":"location","locations":["Bandera","Culebra"],"timeframe":{"type":"named_month","month_name":"April","year":2026,"n_days":null,"start":null,"end":null,"quarter":null},"timeframe_b":null,"limit":null,"sort_direction":"desc","requires_chart":false,"confidence":"high"}
+{"intent":"category_breakdown","metrics":["revenue"],"grain":"month","scope":"location","locations":["Bandera","Culebra"],"timeframe":{"type":"named_month","month_name":"April","year":2026,"n_days":null,"start":null,"end":null,"quarter":null},"timeframe_b":null,"limit":null,"sort_direction":"desc","requires_chart":true,"confidence":"high"}
 
 User: Show me which revenue categories explain the difference between Bandera and Culebra in April
 {"intent":"category_breakdown","metrics":["revenue"],"grain":"month","scope":"location","locations":["Bandera","Culebra"],"timeframe":{"type":"named_month","month_name":"April","year":2026,"n_days":null,"start":null,"end":null,"quarter":null},"timeframe_b":null,"limit":null,"sort_direction":"desc","requires_chart":true,"confidence":"high"}

@@ -144,6 +144,9 @@ def try_fast_reply(
         return f"For **{period}**, the top network day for **{ml}** was **{best.get('date')}** at **{val_fmt}**."
 
     if da == "category_breakdown" or intent == "category_breakdown":
+        um = (user_message or "").lower()
+        if "core sales" in um or "subcategor" in um or "breakdown" in um:
+            return None
         stores = list(data.get("stores") or [])
         if not stores:
             return None
@@ -164,8 +167,12 @@ def try_fast_reply(
                 lines.append(f"- {row.get('category')}: **{_money(rev)}** ({pct}% of store total)")
             src = st.get("category_source") or data.get("source") or {}
             grain = src.get("grain") or ""
-            if grain == "gp_sales_category":
-                lines.append("(Categories from GP line-level sales / SalesCategoryFromGP.)")
+            if grain == "total_core_subcategory":
+                lines.append(
+                    "(Source: TotalCoreTableFinal.Sub_Category; Core Sales filter matches This Month KPI.)"
+                )
+            elif grain == "gp_sales_category":
+                lines.append("(Source: SalesFactFinal / SalesCategoryFromGP — POS line categories.)")
             blocks.append("\n".join(lines))
         if not blocks:
             return None

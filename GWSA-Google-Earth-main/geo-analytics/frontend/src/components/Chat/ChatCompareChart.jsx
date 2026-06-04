@@ -42,13 +42,32 @@ export default function ChatCompareChart({ chart }) {
   const metric = chart.y_label || chart.metric || 'value';
 
   const data = chart.rows.map((row) => {
-    const rawLabel = row[xKey] ?? row.location_name ?? row.label ?? row.category ?? '';
+    const rawLabel =
+      row.category
+      ?? row.location_name
+      ?? row.label
+      ?? row.date
+      ?? row[xKey]
+      ?? '';
+    const rawValue =
+      row.revenue
+      ?? row.metric_value
+      ?? row.value
+      ?? row.NetRevenue
+      ?? row[yKey]
+      ?? 0;
+    const num = Number(rawValue);
+    const isStoreLabel = /retail store|donation station/i.test(String(rawLabel));
     return {
       ...row,
-      label: shortStoreName(rawLabel) || rawLabel,
-      value: Number(row[yKey] ?? row.metric_value ?? row.revenue ?? row.value ?? 0),
+      label: isStoreLabel ? shortStoreName(rawLabel) || rawLabel : String(rawLabel),
+      value: Number.isFinite(num) ? num : 0,
     };
-  });
+  }).filter((d) => d.value > 0 && d.label);
+
+  if (data.length === 0) {
+    return null;
+  }
 
   return (
     <div className="mt-3 rounded-lg border border-gwsa-border bg-gwsa-bg p-2">

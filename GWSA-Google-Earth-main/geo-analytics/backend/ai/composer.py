@@ -222,6 +222,47 @@ def evidence_to_natural_language(data_action: Optional[str], data: dict) -> str:
         period_bit = period or "the requested dates"
         return _cap_evidence_chars(f"No daily revenue peak rows were returned for {period_bit}.")
 
+    if da == "category_breakdown" or (isinstance(data, dict) and data.get("intent") == "category_breakdown"):
+        stores = list((data or {}).get("stores") or [])
+        if stores:
+            parts = []
+            tf = (data.get("timeframe") or {}) if isinstance(data.get("timeframe"), dict) else {}
+            period = str(tf.get("label") or "").strip() or "the selected period"
+            for st in stores[:3]:
+                nm = str(st.get("location_name") or "Store").strip()
+                total = float(st.get("total_revenue") or 0)
+                cats = list(st.get("categories") or [])
+                if not cats:
+                    continue
+                cat_bits = []
+                for c in cats[:15]:
+                    rev = float(c.get("revenue") or 0)
+                    pct = round(100.0 * rev / total, 1) if total > 1e-9 else 0.0
+                    cat_bits.append(f"{c.get('category')}: ${rev:,.2f} ({pct}% of ${total:,.2f} core sales total)")
+                src = st.get("category_source") or data.get("source") or {}
+                table = src.get("table") or src.get("name") or "TotalCoreTableFinal"
+                note = str(src.get("note") or "").strip()
+                core_mtd = st.get("core_sales_total_mtd")
+                mtd_bit = (
+                    f" (This Month core sales total ${float(core_mtd):,.2f} from same table.)"
+                    if core_mtd is not None
+                    else ""
+                )
+                lead = (
+                    f"{nm} core sales for {period}: ${total:,.2f} summed across Sub_Category rows "
+                    f"from {table}{mtd_bit} Not monthly financials."
+                )
+                if note:
+                    lead += f" {note}"
+                parts.append(
+                    lead
+                    + " Breakdown: "
+                    + "; ".join(cat_bits)
+                    + ". Cite only these TotalCore figures; do not mix in SalesFactFinal or monthly P&L unless asked."
+                )
+            if parts:
+                return _cap_evidence_chars(" ".join(parts))
+
     if da.startswith("location_summary:") or da == "location_summary":
         name = str(data.get("location_name") or data.get("name") or "").strip()
         mets = data.get("metrics") or {}

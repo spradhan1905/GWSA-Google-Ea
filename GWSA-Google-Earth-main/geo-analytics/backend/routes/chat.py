@@ -12,6 +12,7 @@ from middleware.security import limiter, ChatRequestSchema
 from config import Config
 
 from db.analytics_actions import (
+    coerce_core_sales_category_plan,
     coerce_plan_for_daily_peak_questions,
     coerce_rank_time_period_session_store,
 )
@@ -25,7 +26,7 @@ from ai.context import build_chart_envelope, data_gap_code
 from ai.followups import build_followups
 from ai.memory import SessionState, merge_session_after_turn, set_pending_followups
 from ai.planner import plan_request
-from ai.planner_heuristic import wants_response_style_hint
+from ai.planner_heuristic import wants_chart, wants_response_style_hint
 from ai.responses import (
     chat_success_payload,
     correlation_timeframe_required_gap_body,
@@ -121,8 +122,12 @@ def _prepare_turn(data: dict) -> dict:
             "plan_used": _plan_used_summary(plan),
         })
 
+    plan = coerce_core_sales_category_plan(dict(plan), user_message)
     plan = coerce_plan_for_daily_peak_questions(dict(plan), user_message)
     plan = coerce_rank_time_period_session_store(plan, user_message, session.last_store_names)
+    if not wants_chart(user_message):
+        plan = dict(plan)
+        plan["requires_chart"] = False
 
     if plan.get("intent") == "greeting":
         merge_session_after_turn(session, {**plan, "intent": "greeting"}, None, store_context)

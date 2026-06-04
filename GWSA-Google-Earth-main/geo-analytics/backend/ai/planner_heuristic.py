@@ -326,8 +326,26 @@ def wants_derived_revenue_per_visit(text: str) -> bool:
     return "revenue per" in t or "sales per" in t or "per donor visit" in t or ("per visitor" in t or "per visit" in t) and ("revenue" in t or "sales" in t)
 
 
+def wants_core_sales_totalcore(text: str) -> bool:
+    """Core sales / subcategory questions that must use TotalCoreTableFinal, not monthly P&L."""
+    t = (text or "").lower()
+    if "by store" in t and "subcategor" not in t and "categor" not in t:
+        return False
+    if "core sales" in t or "core revenue" in t:
+        return True
+    if "subcategor" in t or "sub-categor" in t or "sub categor" in t:
+        return True
+    if ("breakdown" in t or "break down" in t) and any(
+        x in t for x in ("subcategor", "categor", "revenue type", "sales", "revenue")
+    ):
+        return "by store" not in t
+    return False
+
+
 def wants_category_breakdown(text: str) -> bool:
-    """Revenue Category / RevenueType mix (not the same as metric_breakdown by store)."""
+    """Revenue Category / RevenueType mix from TotalCoreTableFinal (not by-store ranking)."""
+    if wants_core_sales_totalcore(text):
+        return True
     t = (text or "").lower()
     if "by store" in t and "categor" not in t and "revenue type" not in t:
         return False
@@ -351,6 +369,8 @@ def wants_category_breakdown(text: str) -> bool:
             "break down by category",
             "breakdown by category",
             "break it down by category",
+            "breakdown by sub",
+            "break down by sub",
         )
     )
 
@@ -711,6 +731,11 @@ def plan_request_heuristic(user_message: str, store_context: str, history: Optio
         else:
             action = "revenue_per_visit_rank"
 
+    elif wants_category_breakdown(text_raw) and timeframe:
+        intent = "category_breakdown"
+        action = "category_breakdown"
+        metric = "revenue"
+
     elif wants_multi_metric(text_raw) and timeframe:
         intent = "multi_metric_summary"
         action = "multi_metric_summary"
@@ -722,10 +747,6 @@ def plan_request_heuristic(user_message: str, store_context: str, history: Optio
     elif wants_metric_breakdown(text_raw) and timeframe:
         intent = "metric_breakdown"
         action = "metric_breakdown"
-
-    elif wants_category_breakdown(text_raw) and timeframe:
-        intent = "category_breakdown"
-        action = "category_breakdown"
 
     elif compare_ok:
         action = "compare_locations"
@@ -794,6 +815,7 @@ def plan_request_heuristic(user_message: str, store_context: str, history: Optio
         "trend_store_ref": trend_ref,
         "trend_store_ref_kind": trend_ref_kind,
         "comparison": comparison_payload,
-        "requires_chart": wants_chart(text_raw) and intent == "compare_locations",
+        "requires_chart": wants_chart(text_raw)
+        and intent in ("compare_locations", "category_breakdown", "trend_summary"),
         "_user_text": text_raw,
     }
