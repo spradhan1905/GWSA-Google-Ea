@@ -8,6 +8,7 @@ INTENT_ACTIONS = frozenset({
     "rank_time_periods",
     "trend_summary",
     "metric_breakdown",
+    "category_breakdown",
     "multi_metric_summary",
     "compare_periods",
     "correlation_check",
@@ -30,6 +31,7 @@ ALLOWED_PLAN_INTENTS = frozenset({
     "peak_store_daily_revenue",
     "trend_summary",
     "metric_breakdown",
+    "category_breakdown",
     "multi_metric_summary",
     "compare_periods",
     "correlation_check",
@@ -68,7 +70,10 @@ INTENT_METRICS = frozenset({
 })
 
 RANK_HINTS = ("highest", "best", "top", "most", "lowest", "least", "furthest", "beat", "beating")
-COMPARE_HINTS = ("compare", "vs", "versus", "against")
+COMPARE_HINTS = (
+    "compare", "vs", "versus", "against", "comparison",
+    "graph", "chart", "plot", "visualize", "draw a", "draw the",
+)
 SUMMARY_HINTS = ("summary", "how is", "how's", "performance", "doing")
 
 MONTH_NAMES = {
@@ -95,6 +100,7 @@ INTENT_TO_ACTION = {
     "peak_store_daily_revenue": "peak_store_daily_revenue",
     "trend_summary": "trend_summary",
     "metric_breakdown": "metric_breakdown",
+    "category_breakdown": "category_breakdown",
     "multi_metric_summary": "multi_metric_summary",
     "compare_periods": "compare_periods",
     "correlation_check": "correlation_check",

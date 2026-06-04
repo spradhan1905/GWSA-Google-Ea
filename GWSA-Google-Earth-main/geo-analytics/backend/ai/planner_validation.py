@@ -257,6 +257,17 @@ def convert_llm_plan_to_execution_plan(
     if isinstance(locs, str):
         locs = [locs]
     store_names = _fuzzy_match_catalog_names(list(locs or []), catalog)
+    if not store_names and session.last_store_names:
+        low = (str(raw.get("_user_text") or text_for_heuristic) or "").lower()
+        if any(
+            tok in low
+            for tok in (
+                "categor", "both", "them", "those", "add door", "chart", "graph",
+                "go deeper", "more detail", "same month", "same period", "compare them",
+                "donation count", "this year", "ytd", "draw a", "comparison",
+            )
+        ):
+            store_names = _fuzzy_match_catalog_names(session.last_store_names, catalog)
 
     grain = raw.get("grain") or "auto"
     scope = raw.get("scope") or "all_retail_stores"
@@ -264,7 +275,12 @@ def convert_llm_plan_to_execution_plan(
     use_viewing_store = bool(
         session.selected_store
         and not store_names
-        and intent in ("compare_locations", "multi_metric_summary", "location_summary")
+        and intent in (
+            "compare_locations",
+            "category_breakdown",
+            "multi_metric_summary",
+            "location_summary",
+        )
     )
 
     limit_raw = raw.get("limit")

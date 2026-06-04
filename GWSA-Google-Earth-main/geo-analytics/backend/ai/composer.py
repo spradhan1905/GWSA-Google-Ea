@@ -322,12 +322,19 @@ def build_composer_messages(
     lim = data_gap.strip() if data_gap and data_gap.strip() not in {"", "None."} else ""
     limitation = f"\nLimitation noted for you: {lim}" if lim else ""
 
+    chart_note = ""
+    if plan.get("requires_chart") or (plan.get("intent") == "compare_locations"):
+        chart_note = (
+            "\nA comparison chart is attached in the UI—describe the numbers in words only; "
+            "do not ask the user to visualize or imagine a graph."
+        )
+
     user_content = "\n\n".join(
         [
             f"The user’s dashboard anchor store is {dash}. "
             f"Use the prose figures below—they are authoritative for this reply.",
             f"Conversation recap:\n{memory_context}",
-            f"Facts to weave into fluent sentences:\n{evidence_block}{limitation}",
+            f"Facts to weave into fluent sentences:\n{evidence_block}{limitation}{chart_note}",
             f"The user asked: {user_message}",
         ]
     )

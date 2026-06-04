@@ -30,6 +30,16 @@ def _validated_this_month_revenue_object() -> str:
     return name
 
 
+def _validated_sales_line_object() -> str:
+    """Line-level POS: JS_API.dbo.SalesFactFinal (or env override)."""
+    name = (Config.SQL_SALES_LINE_OBJECT or "").strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
+        raise ValueError(
+            "SQL_SALES_LINE_OBJECT must be set (e.g. JS_API.dbo.SalesFactFinal)"
+        )
+    return name
+
+
 def _validated_retail_monthly_financial_object() -> str:
     """Quarter / YTD / 12 Months: JS_API.dbo.RetailStoreMonthlyFinancialSummary (or env override)."""
     name = (Config.SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT or "").strip()
@@ -858,6 +868,235 @@ def get_key_metrics(store_id: str, as_of: Optional[str] = None) -> dict:
         "ytdDays": ytd_days,
         "salesPerSqFtAnnualized": annualized_spsf,
         "leaseStatus": lease,
+    }
+
+
+def _category_label_sql() -> str:
+    """Prefer [Category], fall back to [RevenueType] for grouping."""
+    return (
+        "COALESCE("
+        "NULLIF(LTRIM(RTRIM(CAST(d.[Category] AS NVARCHAR(200)))), N''), "
+        "NULLIF(LTRIM(RTRIM(CAST(d.[RevenueType] AS NVARCHAR(200)))), N''), "
+        "N'(Unlabeled)')"
+    )
+
+
+def _gp_category_label_sql() -> str:
+    return (
+        "COALESCE("
+        "NULLIF(LTRIM(RTRIM(CAST(d.SalesCategoryFromGP AS NVARCHAR(200)))), N''), "
+        "N'(Unlabeled)')"
+    )
+
+
+def get_revenue_by_gp_category(store_id: str, start_date: str, end_date: str) -> list:
+    """
+    Revenue by GP sales category (SalesCategoryFromGP) from SalesFactFinal.
+    Used for retail category mix when TotalCore only shows a single rollup bucket.
+    """
+    from db.static_locations import get_static_store_meta, sales_unit_name_for_store
+
+    if _is_consolidated_location(store_id):
+        return []
+
+    obj = _validated_sales_line_object()
+    cat_expr = _gp_category_label_sql()
+    sum_rev = (
+        "CAST(SUM(ISNULL(CAST(d.Revenue AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS Revenue"
+    )
+    date_pred = (
+        f"{SOLDTS_AS_DATE_SQL} >= CAST(? AS DATE) AND {SOLDTS_AS_DATE_SQL} <= CAST(? AS DATE)"
+    )
+
+    if Config.LOCATIONS_SOURCE == "static":
+        meta = get_static_store_meta(store_id)
+        if not meta:
+            return []
+        sold = meta.get("sold_store_id")
+        unit = sales_unit_name_for_store(store_id)
+        if sold is not None:
+            sql = f"""
+                SELECT {cat_expr} AS RevenueCategory, {sum_rev}
+                FROM {obj} AS d
+                WHERE TRY_CONVERT(DATETIME, d.Soldts) IS NOT NULL
+                  AND d.SoldStoreId = ?
+                  AND {date_pred}
+                GROUP BY {cat_expr}
+                HAVING SUM(ISNULL(CAST(d.Revenue AS DECIMAL(18, 4)), 0)) <> 0
+                ORDER BY Revenue DESC
+            """
+            return _execute_query(sql, (int(sold), start_date, end_date))
+        if not unit:
+            return []
+        unit_sql, unit_params = _sales_unit_name_predicate_sql(unit)
+        sql = f"""
+            SELECT {cat_expr} AS RevenueCategory, {sum_rev}
+            FROM {obj} AS d
+            WHERE TRY_CONVERT(DATETIME, d.Soldts) IS NOT NULL
+            {unit_sql}
+              AND {date_pred}
+            GROUP BY {cat_expr}
+            HAVING SUM(ISNULL(CAST(d.Revenue AS DECIMAL(18, 4)), 0)) <> 0
+            ORDER BY Revenue DESC
+        """
+        return _execute_query(sql, (*unit_params, start_date, end_date))
+
+    loc = resolve_location_reference(store_id)
+    unit = sales_unit_name_for_store(str(loc["LocationID"])) if loc else None
+    if not unit:
+        unit = str(loc.get("LocationName") or "").strip() if loc else ""
+    if not unit:
+        return []
+    unit_sql, unit_params = _sales_unit_name_predicate_sql(unit)
+    sql = f"""
+        SELECT {cat_expr} AS RevenueCategory, {sum_rev}
+        FROM {obj} AS d
+        WHERE TRY_CONVERT(DATETIME, d.Soldts) IS NOT NULL
+        {unit_sql}
+          AND {date_pred}
+        GROUP BY {cat_expr}
+        HAVING SUM(ISNULL(CAST(d.Revenue AS DECIMAL(18, 4)), 0)) <> 0
+        ORDER BY Revenue DESC
+    """
+    return _execute_query(sql, (*unit_params, start_date, end_date))
+
+
+def _category_rows_for_store(store_id: str, start_date: str, end_date: str) -> Tuple[list, dict]:
+    """Prefer GP line categories when multiple buckets exist; else TotalCore Category/RevenueType."""
+    gp_rows = get_revenue_by_gp_category(store_id, start_date, end_date)
+    distinct_gp = len({str(r.get("RevenueCategory") or "").strip() for r in gp_rows if r})
+    if distinct_gp >= 2:
+        return gp_rows, {
+            "name": _validated_sales_line_object(),
+            "grain": "gp_sales_category",
+            "field": "SalesCategoryFromGP",
+        }
+    core_rows = get_revenue_by_category(store_id, start_date, end_date)
+    return core_rows, {
+        "name": _validated_this_month_revenue_object(),
+        "grain": "total_core_category",
+        "field": "Category/RevenueType",
+    }
+
+
+def get_revenue_by_category(store_id: str, start_date: str, end_date: str) -> list:
+    """
+    Revenue grouped by Category/RevenueType from TotalCoreTableFinal (all categories).
+    Returns rows: RevenueCategory, Revenue.
+    """
+    from db.static_locations import get_static_store_meta, sales_unit_name_for_store
+
+    if _is_consolidated_location(store_id):
+        return []
+
+    meta = get_static_store_meta(store_id)
+    if not meta and Config.LOCATIONS_SOURCE == "static":
+        return []
+
+    obj = _validated_this_month_revenue_object()
+    cat_expr = _category_label_sql()
+    sum_rev = (
+        "CAST(SUM(ISNULL(CAST(d.[Revenue] AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS Revenue"
+    )
+
+    if Config.LOCATIONS_SOURCE == "static":
+        sold = meta.get("sold_store_id") if meta else None
+        ssu = meta.get("sales_store_unit") if meta else None
+        uid = TOTAL_CORE_UNIT_LOCATION_ID_SQL
+        params: tuple = ()
+        where = f"WHERE {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
+        params = (start_date, end_date)
+
+        if sold is not None:
+            where = f"WHERE {uid} = ? AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
+            params = (int(sold), start_date, end_date)
+        elif (store_id or "").strip().isdigit():
+            where = f"WHERE {uid} = ? AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
+            params = (int(store_id), start_date, end_date)
+        elif ssu is not None and str(ssu).strip():
+            where = (
+                "WHERE CHARINDEX(LTRIM(RTRIM(?)), LTRIM(RTRIM(CAST(d.[Unit] AS NVARCHAR(200))))) > 0 "
+                f"AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
+            )
+            params = (str(ssu).strip(), start_date, end_date)
+        else:
+            unit = sales_unit_name_for_store(store_id)
+            if not unit:
+                return []
+            unit_sql, unit_params = _sales_unit_name_predicate_sql(unit)
+            where = (
+                f"WHERE 1 = 1 {unit_sql} "
+                f"AND {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE) AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)"
+            )
+            params = (*unit_params, start_date, end_date)
+
+        sql = f"""
+            SELECT {cat_expr} AS RevenueCategory, {sum_rev}
+            FROM {obj} AS d
+            {where}
+            GROUP BY {cat_expr}
+            HAVING SUM(ISNULL(CAST(d.[Revenue] AS DECIMAL(18, 4)), 0)) <> 0
+            ORDER BY Revenue DESC
+        """
+        return _execute_query(sql, params)
+
+    loc_tbl = _validated_locations_table()
+    sid = (store_id or "").strip()
+    join_pred = _total_core_join_pred_database()
+    sql = f"""
+        SELECT {cat_expr} AS RevenueCategory, {sum_rev}
+        FROM {obj} AS d
+        INNER JOIN {loc_tbl} AS loc ON loc.LocationID = ?
+        {join_pred}
+        WHERE {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE)
+          AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)
+        GROUP BY {cat_expr}
+        HAVING SUM(ISNULL(CAST(d.[Revenue] AS DECIMAL(18, 4)), 0)) <> 0
+        ORDER BY Revenue DESC
+    """
+    return _execute_query(sql, (sid, start_date, end_date))
+
+
+def compare_revenue_categories(
+    store_ids: List[str],
+    start_date: str,
+    end_date: str,
+) -> dict:
+    """Category breakdown for up to three stores for chat/compare."""
+    stores_out = []
+    for sid in (store_ids or [])[:3]:
+        ref = resolve_location_reference(str(sid).strip())
+        if not ref:
+            continue
+        lid = str(ref.get("LocationID") or sid)
+        rows, src = _category_rows_for_store(lid, start_date, end_date)
+        total = sum(_coerce_number(r.get("Revenue")) for r in rows)
+        stores_out.append(
+            {
+                "location_id": lid,
+                "location_name": ref.get("LocationName"),
+                "total_revenue": round(total, 2),
+                "category_source": src,
+                "categories": [
+                    {
+                        "category": r.get("RevenueCategory"),
+                        "revenue": round(_coerce_number(r.get("Revenue")), 2),
+                    }
+                    for r in rows
+                ],
+            }
+        )
+    primary_src = (
+        stores_out[0].get("category_source")
+        if stores_out
+        else {"name": _validated_this_month_revenue_object(), "grain": "category_totals"}
+    )
+    return {
+        "intent": "category_breakdown",
+        "start": start_date,
+        "end": end_date,
+        "stores": stores_out,
+        "source": primary_src,
     }
 
 
@@ -2734,15 +2973,29 @@ def donor_map_summary(store_id: str, max_sample: int = 5) -> dict:
 
 def build_data_catalog() -> dict:
     """Metadata-only capability list for assistants (no database reads)."""
+    try:
+        from ai.question_bank import load_question_bank, sample_questions_for_catalog
+
+        bank = load_question_bank()
+        examples = sample_questions_for_catalog(24)
+        bank_total = int(bank.get("total") or 0)
+    except Exception:
+        examples = []
+        bank_total = 0
+
     return {
         "intent": "data_catalog",
-        "version": "1",
+        "version": "2",
         "description": (
             "GWSA GeoAnalytics chat uses approved parameterized queries only. "
             "Intents include store summaries, rankings, trends, correlations, period compares, "
-            "breakdowns by store, derived revenue-per-visit, donor map counts, donation totals, "
-            "and actual vs budget core revenue."
+            "breakdowns by store, revenue category breakdowns (Category/RevenueType), "
+            "derived revenue-per-visit, donor map counts, donation totals, "
+            "and actual vs budget core revenue. Follow-up questions can reuse stores and dates "
+            "from the prior turn when you say things like 'show categories' or 'add door count'."
         ),
+        "example_questions": examples,
+        "question_bank_size": bank_total,
         "datasets": [
             {"name": _validated_this_month_revenue_object(), "grain": "daily_core_revenue"},
             {"name": _validated_retail_monthly_financial_object(), "grain": "monthly_financials"},
@@ -2760,5 +3013,6 @@ def build_data_catalog() -> dict:
             "revenue_per_visit derived",
             "network correlation revenue vs visits (daily summed)",
             "trends: multi-month revenue, net income, expense ratio with door counts",
+            "category_breakdown: revenue by Category/RevenueType for one or more stores",
         ],
     }

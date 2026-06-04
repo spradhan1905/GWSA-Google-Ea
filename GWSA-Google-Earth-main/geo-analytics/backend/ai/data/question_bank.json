@@ -1,0 +1,2181 @@
+{
+  "version": 2,
+  "total": 300,
+  "questions": [
+    {
+      "id": 1,
+      "text": "Compare core sales for Bandera and Culebra for the month of April. Give me a full overview.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 2,
+      "text": "How does Bandera compare to Culebra on revenue in April 2026?",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 3,
+      "text": "Compare DeZavala and Blanco North for March revenue \u2014 who won and by how much?",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 4,
+      "text": "Fredericksburg vs Marbach \u2014 which store had higher core sales last month?",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 5,
+      "text": "Put Bitters and Commerce side by side for YTD revenue and explain the gap.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 6,
+      "text": "Compare Kerrville and New Braunfels for Q1 2026 total revenue.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 7,
+      "text": "Austin Hwy vs Rittiman \u2014 April core sales comparison with dollar amounts.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 8,
+      "text": "Which is stronger this month: Potranco or Culebra? Show the numbers.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 9,
+      "text": "Compare SA Outlet and Laredo Outlet on revenue for the last 12 months.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 10,
+      "text": "Gateway vs Summit \u2014 rolling 3-month revenue comparison.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 11,
+      "text": "Bulverde vs Bulverde North \u2014 are we seeing similar sales patterns in April?",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 12,
+      "text": "Compare Goliad and South Park for February 2026 net income and revenue.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 13,
+      "text": "Evans vs Blanco \u2014 who had the better April and what was the percentage difference?",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 14,
+      "text": "Cibolo vs Seguin \u2014 compare core sales for this month to date.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 15,
+      "text": "WW White vs Marbach \u2014 last month revenue comparison.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 16,
+      "text": "Laredo Central vs Laredo \u2014 how do the two Laredo sites compare on April sales?",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 17,
+      "text": "Compare the top two San Antonio stores by revenue in March 2026.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 18,
+      "text": "Bandera vs Culebra vs DeZavala \u2014 rank them for April revenue.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 19,
+      "text": "I\u2019m looking at Culebra on the map \u2014 how does it compare to the chain average for April revenue?",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 20,
+      "text": "Draw a graph comparing Bandera and Culebra sales for April.",
+      "category": "compare_revenue",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 21,
+      "text": "Show me which revenue categories are driving Bandera\u2019s April sales \u2014 break it down.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 22,
+      "text": "What categories make up the difference between Bandera and Culebra in April?",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 23,
+      "text": "Compare Bandera and Culebra by sales category for April \u2014 where are the gaps?",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 24,
+      "text": "For Culebra in March, list each core revenue category and its dollar total.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 25,
+      "text": "Which product or revenue categories grew the most at DeZavala from February to March?",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 26,
+      "text": "Break down Marbach April revenue by category and rank largest to smallest.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 27,
+      "text": "Show category-level revenue for Bitters YTD with percentages of the total.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 28,
+      "text": "What share of Bandera\u2019s revenue is Core Sales vs other categories in April?",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 29,
+      "text": "Compare category mix for Bandera and Culebra in April \u2014 not just the total.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 30,
+      "text": "Which categories hurt Culebra vs Bandera in April?",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 31,
+      "text": "Give me a category comparison chart for Bandera and Culebra for April.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 32,
+      "text": "Show subcategory revenue for Potranco in February 2026.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 33,
+      "text": "What revenue types contributed to the consolidated total last month?",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 34,
+      "text": "For this store, which categories are below budget in April?",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 35,
+      "text": "Explain April revenue at Fredericksburg by category with narrative commentary.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 36,
+      "text": "Compare donation-driven vs retail categories for Commerce in Q1.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 37,
+      "text": "Where is Bandera losing to Culebra \u2014 which line items or categories?",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 38,
+      "text": "Show me the full category breakdown that explains the $23k gap between Bandera and Culebra in April.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 39,
+      "text": "List all revenue categories for the network in March ranked by dollars.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 40,
+      "text": "Break April sales into categories for both Bandera and Culebra in one table.",
+      "category": "category_breakdown",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 41,
+      "text": "Compare core sales for Bandera and Culebra for April. Give an overview.",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 42,
+      "text": "How did Marbach do in March on revenue and door count?",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 43,
+      "text": "Compare DeZavala and Blanco for March revenue.",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 44,
+      "text": "What were Bandera\u2019s April core sales?",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 45,
+      "text": "Rank top 5 stores by revenue in February.",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 46,
+      "text": "Compare Bandera and Culebra for April.",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 47,
+      "text": "Summarize Culebra performance YTD.",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 48,
+      "text": "How is Bitters doing this month?",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 49,
+      "text": "Show April budget vs actual for Potranco.",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 50,
+      "text": "Compare Fredericksburg and Gateway for door counts in April.",
+      "category": "follow_up",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 51,
+      "text": "Graph Bandera vs Culebra core sales for April.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 52,
+      "text": "Show a line chart of Marbach revenue for the last 12 months.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 53,
+      "text": "Chart door counts and revenue together for DeZavala in April.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 54,
+      "text": "Visualize top 10 stores by revenue for March.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 55,
+      "text": "Plot donations vs door traffic for Culebra this month.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 56,
+      "text": "Compare Bandera and Culebra in a bar chart for April sales.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 57,
+      "text": "Show me a trend chart for net income at Blanco North YTD.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 58,
+      "text": "Graph actual vs budget for Potranco for the last 90 days.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 59,
+      "text": "Display a multi-metric chart for this store \u2014 revenue, doors, donations.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 60,
+      "text": "Chart which day in April had the highest sale at Bandera.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 61,
+      "text": "Show network-wide revenue by month for 2025 and 2026 on one chart.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 62,
+      "text": "Graph expense ratio across all stores for last quarter.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 63,
+      "text": "Compare April vs March for Culebra in a side-by-side chart.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 64,
+      "text": "Visualize revenue per visit for every store in April.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 65,
+      "text": "I need a chart, not text \u2014 Bandera vs Culebra April categories.",
+      "category": "charts",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 66,
+      "text": "How is Bandera doing this month? Give me a complete performance summary.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 67,
+      "text": "Full overview of Culebra for April \u2014 revenue, traffic, donations, and budget.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 68,
+      "text": "Tell me everything important about Marbach for the last 30 days.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 69,
+      "text": "How\u2019s DeZavala performing YTD? I want detail, not one number.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 70,
+      "text": "Explain Potranco\u2019s March results like you\u2019re briefing leadership.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 71,
+      "text": "What\u2019s going on at Bitters \u2014 good month or bad month and why?",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 72,
+      "text": "Summarize Kerrville for rolling 3 months with highs and lows.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 73,
+      "text": "Is Commerce on track this month for revenue and expenses?",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 74,
+      "text": "Deep dive on Fredericksburg April \u2014 daily patterns and totals.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 75,
+      "text": "How is the selected store doing? (with a store open on the map)",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 76,
+      "text": "Performance check for New Braunfels \u2014 revenue, net income, expense ratio.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 77,
+      "text": "Give me a narrative on SA Outlet for Q1.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 78,
+      "text": "What should I worry about at South Park this month?",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 79,
+      "text": "Bulverde North \u2014 April snapshot with context vs prior month.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 80,
+      "text": "Laredo stores combined \u2014 how are we doing in that market?",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 81,
+      "text": "Evans \u2014 best and worst days in April for sales.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 82,
+      "text": "Gateway \u2014 multi-metric summary for last month with interpretation.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 83,
+      "text": "Seguin \u2014 are donations and door counts aligned with revenue?",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 84,
+      "text": "WW White \u2014 explain MTD core sales vs budget.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 85,
+      "text": "Cibolo \u2014 full April report: sales, visitors, donations, margin.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 86,
+      "text": "Top 10 stores by revenue in March 2026.",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 87,
+      "text": "Which store had the lowest door count in April?",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 88,
+      "text": "Bottom 5 stores by net income YTD.",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 89,
+      "text": "Who collected the most donations last month?",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 90,
+      "text": "Highest revenue per visitor in April \u2014 list stores.",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 91,
+      "text": "Which store beat budget by the most in March?",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 92,
+      "text": "Rank all stores by expense ratio for Q1 \u2014 best to worst.",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 93,
+      "text": "What store had the highest single-day sale in February?",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 94,
+      "text": "Top 3 and bottom 3 stores for April core sales.",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 95,
+      "text": "Which donation station had the most donations in April?",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 96,
+      "text": "Furthest from budget on the low side \u2014 which stores in April?",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 97,
+      "text": "Best performing store in the network this month?",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 98,
+      "text": "Rank Laredo area stores by revenue for April.",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 99,
+      "text": "Top 5 stores by donations YTD.",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 100,
+      "text": "Which store improved the most from March to April on revenue?",
+      "category": "rankings",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 101,
+      "text": "How many donations did Marbach collect in April?",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 102,
+      "text": "Compare donations at Bandera and Culebra for April.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 103,
+      "text": "Average daily donations for DeZavala last month.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 104,
+      "text": "Peak donation day for Culebra in March \u2014 which date and how much?",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 105,
+      "text": "Total door visits for Bitters in April vs March.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 106,
+      "text": "Does more foot traffic at Marbach mean more revenue? Check correlation for 90 days.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 107,
+      "text": "Donations trend for Potranco over the last 6 months.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 108,
+      "text": "Which store has the highest donations per visitor?",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 109,
+      "text": "Compare door counts for Bulverde and Bulverde North in April.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 110,
+      "text": "Lowest donation day for Bandera in April.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 111,
+      "text": "Network-wide total donations for YTD.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 112,
+      "text": "Fredericksburg \u2014 donations vs revenue for April, explained.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 113,
+      "text": "Are Culebra\u2019s April donations up or down vs last year?",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 114,
+      "text": "Door count daily average for Gateway this month.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 115,
+      "text": "Donations and door count together for the consolidated view last month.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 116,
+      "text": "Is Bandera above or below budget for April core revenue?",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 117,
+      "text": "Budget vs actual for Culebra this month \u2014 variance in dollars and percent.",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 118,
+      "text": "Compare March vs April revenue for DeZavala.",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 119,
+      "text": "How does February 2026 compare to January 2026 for the whole chain?",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 120,
+      "text": "YTD revenue for Bandera vs same point last year.",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 121,
+      "text": "Rolling 3-month net income for Marbach.",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 122,
+      "text": "Expense ratio for Culebra in April \u2014 is it healthy?",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 123,
+      "text": "Operating vs personnel expenses for Blanco in Q1.",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 124,
+      "text": "Which stores are under budget in April?",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 125,
+      "text": "Actual vs budget trend for Potranco Jan through Apr.",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 126,
+      "text": "Compare Q4 2025 to Q1 2026 revenue for the network.",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 127,
+      "text": "Last week vs prior week \u2014 revenue change for Bitters.",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 128,
+      "text": "Full year 2025 revenue for Kerrville.",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 129,
+      "text": "Is consolidated performance on track YTD?",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 130,
+      "text": "March vs April \u2014 which stores improved on net income?",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 131,
+      "text": "Show the 12-month revenue trend for Bandera.",
+      "category": "trends",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 132,
+      "text": "Trend for door count and revenue at Culebra for the last year.",
+      "category": "trends",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 133,
+      "text": "Revenue per visit for all stores in April \u2014 rank them.",
+      "category": "trends",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 134,
+      "text": "Historical trend for donations at Marbach \u2014 go back as far as data allows.",
+      "category": "trends",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 135,
+      "text": "How has expense ratio trended for DeZavala over 12 months?",
+      "category": "trends",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 136,
+      "text": "Show donor map context for the store I have selected.",
+      "category": "trends",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 137,
+      "text": "Best day for sales at Potranco in February \u2014 date and amount.",
+      "category": "trends",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 138,
+      "text": "Multi-metric trend for Blanco North \u2014 income, revenue, expense ratio, 6 months.",
+      "category": "trends",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 139,
+      "text": "What can you answer about our stores? What data do you have?",
+      "category": "help_edge",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 140,
+      "text": "On which day in February did Potranco have the highest sale?",
+      "category": "help_edge",
+      "tags": [],
+      "source": "v1"
+    },
+    {
+      "id": 141,
+      "text": "What is the sales square footage for Marbach?",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 142,
+      "text": "Show sales per square foot for Bandera year to date.",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 143,
+      "text": "Is Culebra leased or owned?",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 144,
+      "text": "Compare Bandera and Culebra on sales per sq ft for 2026.",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 145,
+      "text": "Which store has the highest sales per square foot this year?",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 146,
+      "text": "How big is the sales floor at DeZavala in square feet?",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 147,
+      "text": "Key metrics snapshot for Potranco \u2014 sq ft, SPSF, lease status.",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 148,
+      "text": "Does Kerrville have more sales floor than New Braunfels?",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 149,
+      "text": "Tier and square footage for Bitters.",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 150,
+      "text": "Annualized sales per sq ft for Commerce vs network average.",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 151,
+      "text": "List top 5 stores by sales per square foot YTD.",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 152,
+      "text": "Is Fredericksburg owned or leased and what is its sales sq ft?",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 153,
+      "text": "Explain how sales per sq ft is calculated for this store.",
+      "category": "key_metrics",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 154,
+      "text": "Which leased stores have the best sales per sq ft in April?",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 155,
+      "text": "Square footage and tier for all stores I manage in division 1.",
+      "category": "key_metrics",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 156,
+      "text": "How is SA Outlet performing vs regular retail stores in April?",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 157,
+      "text": "Compare Laredo Outlet to Laredo Central on revenue last month.",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 158,
+      "text": "Donation station at Garden Ridge \u2014 how much did it collect in March?",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 159,
+      "text": "Rank donation stations by total donations in April.",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 160,
+      "text": "Are donation stations busier on weekends? Check last 30 days.",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 161,
+      "text": "Churchill Estates donation station vs Oak Park station \u2014 donations.",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 162,
+      "text": "Do outlets have lower expense ratios than stores?",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 163,
+      "text": "Traffic at Leon Springs donation station this month.",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 164,
+      "text": "Which ADC had the peak donation day in February?",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 165,
+      "text": "Consolidated view \u2014 retail vs donation station contribution.",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 166,
+      "text": "Is Lakeside Plaza donation station growing YTD?",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 167,
+      "text": "Compare outlet door counts to outlet revenue for SA Outlet.",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 168,
+      "text": "How many donation stations beat their March donations in April?",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 169,
+      "text": "SOHO donation station daily average donations this month.",
+      "category": "outlet_adc",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 170,
+      "text": "Parkwood Place station \u2014 full month donation summary.",
+      "category": "outlet_adc",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 171,
+      "text": "How are San Antonio north-side stores doing in April?",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 172,
+      "text": "Compare all Kerrville-area performance to San Antonio average.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 173,
+      "text": "Laredo market total revenue and donations for Q1.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 174,
+      "text": "Which division had the best April revenue?",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 175,
+      "text": "Stores on the south side \u2014 rank by net income March.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 176,
+      "text": "New Braunfels and Seguin \u2014 sister cities comparison for April.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 177,
+      "text": "Loop 1604 corridor stores \u2014 revenue trend 6 months.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 178,
+      "text": "How does Cibolo compare to other suburban stores?",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 179,
+      "text": "I-35 corridor stores ranked by door count April.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 180,
+      "text": "Hill Country stores revenue share of the network.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 181,
+      "text": "Downtown San Antonio stores \u2014 Commerce and nearby comparison.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 182,
+      "text": "Which store is farthest below budget in my region?",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 183,
+      "text": "Spring Branch / Bulverde North cluster performance.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 184,
+      "text": "Potranco and Culebra west-side comparison with detail.",
+      "category": "geography",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 185,
+      "text": "Market share style view \u2014 Bandera vs all SA stores April.",
+      "category": "geography",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 186,
+      "text": "Why did Culebra miss budget in April?",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 187,
+      "text": "Why is Marbach door count down but revenue flat?",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 188,
+      "text": "Explain why Bandera beat Culebra in April in plain English.",
+      "category": "why_narrative",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 189,
+      "text": "What likely drove the spike at Bitters on April 12?",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 190,
+      "text": "Root cause summary for DeZavala expense ratio increase.",
+      "category": "why_narrative",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 191,
+      "text": "Tell me a story about Potranco\u2019s March \u2014 good or bad and why.",
+      "category": "why_narrative",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 192,
+      "text": "Why are donations soft at Fredericksburg this month?",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 193,
+      "text": "Is underperformance at South Park a traffic issue or sales issue?",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 194,
+      "text": "What changed week over week at Gateway in April?",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 195,
+      "text": "Give me talking points for a leadership meeting on Culebra.",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 196,
+      "text": "Why did the network dip the second week of March?",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 197,
+      "text": "Help me understand Evans April vs March in full sentences.",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 198,
+      "text": "What should the GM at Marbach focus on based on April data?",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 199,
+      "text": "Diagnose Blanco North \u2014 revenue, traffic, donations together.",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 200,
+      "text": "Summarize risks for underperforming stores this quarter.",
+      "category": "why_narrative",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 201,
+      "text": "Percent change in revenue for Bandera March to April.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 202,
+      "text": "Which stores grew donations more than 10% April vs March?",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 203,
+      "text": "Culebra April revenue growth rate vs last year same month.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 204,
+      "text": "Show percent of budget attained for each store in March.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 205,
+      "text": "Fastest growing store by net income Q1 to Q2.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 206,
+      "text": "Did door count grow faster than revenue at Marbach?",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 207,
+      "text": "MoM percent change network-wide for core sales.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 208,
+      "text": "Bandera vs Culebra \u2014 percent difference in April revenue.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 209,
+      "text": "Donation growth trend for Potranco last 4 months.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 210,
+      "text": "Stores with negative revenue growth in April \u2014 list them.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 211,
+      "text": "How much did consolidated revenue grow YTD vs last year?",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 212,
+      "text": "Expense ratio change in basis points for DeZavala April vs March.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 213,
+      "text": "Traffic up or down percent for Bitters April vs March?",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 214,
+      "text": "Rank stores by percent over budget in April.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 215,
+      "text": "Revenue run rate for Culebra if April pace continues.",
+      "category": "growth",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 216,
+      "text": "Compare Bandera, Culebra, and DeZavala for April revenue.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 217,
+      "text": "Rank Bitters, Commerce, Fredericksburg, and Gateway for March door count.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 218,
+      "text": "Who is winning among north stores: Blanco North, Evans, Gateway, Summit?",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 219,
+      "text": "Table of April revenue for all Laredo locations.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 220,
+      "text": "Top 3 and bottom 3 for sales per visit in March.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 221,
+      "text": "Compare my top 5 stores on budget attainment in April.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 222,
+      "text": "Show April core sales for every store on Bandera road corridor.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 223,
+      "text": "Which of these is best: Marbach, South Park, WW White \u2014 April revenue?",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 224,
+      "text": "Cluster compare \u2014 Bulverde, Bulverde North, Cibolo donations in April.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 225,
+      "text": "Network leaderboard April \u2014 revenue, doors, donations columns.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 226,
+      "text": "Compare Austin Hwy, Rittiman, and SA Outlet for Q1.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 227,
+      "text": "Three-store chart: Potranco, Culebra, DeZavala monthly revenue.",
+      "category": "multi_compare",
+      "tags": [
+        "chart"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 228,
+      "text": "April category breakdown for Bandera, Culebra, and Marbach.",
+      "category": "multi_compare",
+      "tags": [
+        "category"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 229,
+      "text": "Which store in the compare group has the worst expense ratio?",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 230,
+      "text": "Side by side March vs April for Bandera and Culebra and Blanco.",
+      "category": "multi_compare",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 231,
+      "text": "Week-by-week revenue for Bandera in April.",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 232,
+      "text": "Which week of March was strongest for Culebra?",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 233,
+      "text": "Daily door count pattern for Marbach in April \u2014 weekday vs weekend.",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 234,
+      "text": "Show me the worst sales day in April for DeZavala.",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 235,
+      "text": "How many days in April did Bitters beat $10k in core sales?",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 236,
+      "text": "First half vs second half of April for Potranco revenue.",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 237,
+      "text": "Calendar heatmap style summary \u2014 busy days at Fredericksburg in March.",
+      "category": "granularity",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 238,
+      "text": "Which day of week has the highest donations at Culebra?",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 239,
+      "text": "Rolling 7-day average revenue for Gateway last 90 days.",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 240,
+      "text": "Compare week 1 and week 4 of April for Bandera and Culebra.",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 241,
+      "text": "Mid-month slump at Marbach \u2014 which days dragged April down?",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 242,
+      "text": "Peak hour proxy \u2014 not available \u2014 but peak day for door count in April.",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 243,
+      "text": "List top 5 sales days in February for Potranco.",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 244,
+      "text": "Was Easter week stronger for donations network-wide?",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 245,
+      "text": "Daily budget attainment for Culebra in April.",
+      "category": "granularity",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 246,
+      "text": "How is Goodwill SA performing overall this month?",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 247,
+      "text": "Executive summary of the Opportunity Center consolidated view.",
+      "category": "executive",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 248,
+      "text": "Network KPI dashboard narrative for April.",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 249,
+      "text": "Are we ahead or behind plan as an organization in April?",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 250,
+      "text": "Total donations and total revenue for the whole company YTD.",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 251,
+      "text": "Which metric should leadership worry about most this month?",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 252,
+      "text": "Retail store count and average revenue per store in March.",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 253,
+      "text": "Consolidated actual vs budget for core revenue April.",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 254,
+      "text": "High-level trend \u2014 are we improving or declining over 12 months?",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 255,
+      "text": "Biggest win and biggest miss for the network in April.",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 256,
+      "text": "Compare SA market to Kerrville market contribution in Q1.",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 257,
+      "text": "Donation dollars per retail store visit network average.",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 258,
+      "text": "Expense ratio at consolidated level vs last year.",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 259,
+      "text": "Strategic view \u2014 stores to invest in based on SPSF and growth.",
+      "category": "executive",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 260,
+      "text": "One-page brief: April performance for all retail stores.",
+      "category": "executive",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 261,
+      "text": "hows bandera doing",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 262,
+      "text": "culebra vs bandera april sales pls",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 263,
+      "text": "need chart bandera culebra",
+      "category": "casual",
+      "tags": [
+        "chart"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 264,
+      "text": "what categories bandera april",
+      "category": "casual",
+      "tags": [
+        "category"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 265,
+      "text": "door count marbach last month?",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 266,
+      "text": "top store revenue march",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 267,
+      "text": "is potranco over budget",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 268,
+      "text": "donations down at bitters?",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 269,
+      "text": "compare them on traffic",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 270,
+      "text": "same month last year?",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 271,
+      "text": "more detail pls",
+      "category": "casual",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 272,
+      "text": "break it down by category",
+      "category": "casual",
+      "tags": [
+        "category"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 273,
+      "text": "whos winning bandera or culebra",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 274,
+      "text": "show trend 12 mo culebra",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 275,
+      "text": "what can u tell me about store data",
+      "category": "casual",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 276,
+      "text": "Now show categories for that comparison.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up",
+        "category"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 277,
+      "text": "Add expense ratio to those two stores.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 278,
+      "text": "Same stores, March instead.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 279,
+      "text": "Chart it please.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up",
+        "chart"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 280,
+      "text": "I need more than one sentence.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 281,
+      "text": "Break down donations too.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 282,
+      "text": "What about door count?",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 283,
+      "text": "Explain for my VP.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up",
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 284,
+      "text": "Which categories explain the gap?",
+      "category": "follow_up",
+      "tags": [
+        "follow_up",
+        "category",
+        "detail"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 285,
+      "text": "Show the monthly trend for both.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 286,
+      "text": "Compare on net income instead.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 287,
+      "text": "Was either store over budget?",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 288,
+      "text": "Give me revenue per visitor for both.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 289,
+      "text": "Now do Kerrville instead of Bandera.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 290,
+      "text": "Keep Culebra \u2014 swap the other store to DeZavala.",
+      "category": "follow_up",
+      "tags": [
+        "follow_up"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 291,
+      "text": "Draw a comparison graph for sales in Bandera and Culebra for April.",
+      "category": "compare_revenue",
+      "tags": [
+        "chart"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 292,
+      "text": "Show revenue types for Bandera and Culebra in April side by side.",
+      "category": "category_breakdown",
+      "tags": [
+        "category"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 293,
+      "text": "Visualize category differences between Bandera and Culebra for April.",
+      "category": "charts",
+      "tags": [
+        "category"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 294,
+      "text": "Full performance narrative for the store I have selected on the map.",
+      "category": "store_overview",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 295,
+      "text": "Which store had the best sales day network-wide in April?",
+      "category": "rankings",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 296,
+      "text": "Correlation between donations and door count at Marbach for 60 days.",
+      "category": "donations_door",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 297,
+      "text": "How did April actual compare to budget for Bandera and Culebra?",
+      "category": "budget_periods",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 298,
+      "text": "Show revenue and donations trend together for Culebra for 1 year.",
+      "category": "trends",
+      "tags": [],
+      "source": "v2"
+    },
+    {
+      "id": 299,
+      "text": "What types of questions can you answer about categories and comparisons?",
+      "category": "help_edge",
+      "tags": [
+        "category"
+      ],
+      "source": "v2"
+    },
+    {
+      "id": 300,
+      "text": "Give a detailed comparison overview of Bandera vs Culebra for April.",
+      "category": "why_narrative",
+      "tags": [
+        "detail"
+      ],
+      "source": "v2"
+    }
+  ]
+}

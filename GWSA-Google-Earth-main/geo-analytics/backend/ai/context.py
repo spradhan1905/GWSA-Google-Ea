@@ -44,6 +44,18 @@ def chart_rows_for_payload(intent: str, analytics_data: dict) -> list:
         return list(analytics_data.get("rows") or [])[:60]
     if intent == "compare_locations":
         return list(analytics_data.get("locations") or [])[:20]
+    if intent == "category_breakdown":
+        rows = []
+        for st in analytics_data.get("stores") or []:
+            if not isinstance(st, dict):
+                continue
+            for cat in st.get("categories") or []:
+                rows.append({
+                    "location_name": st.get("location_name"),
+                    "category": cat.get("category"),
+                    "revenue": cat.get("revenue"),
+                })
+        return rows[:40]
     if intent == "compare_periods":
         pa = analytics_data.get("period_a") or {}
         pb = analytics_data.get("period_b") or {}
@@ -71,6 +83,7 @@ def build_chart_envelope(intent: str, plan: dict, analytics_data: Optional[dict]
         "compare_locations",
         "compare_periods",
         "trend_summary",
+        "category_breakdown",
     }:
         return None
     from ai.followups import chart_config_for_intent

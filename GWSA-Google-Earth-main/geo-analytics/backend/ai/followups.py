@@ -56,6 +56,11 @@ _FOLLOWUP_TEMPLATES = {
         "Show door count ranking for the same period",
         "How does the top store compare to the network median?",
     ],
+    "category_breakdown": [
+        "Add door count to the comparison",
+        "Show the monthly trend for both stores",
+        "Compare them on net income for the same period",
+    ],
     "derived_metric": [
         "Show the same ranking for raw revenue",
         "Which store improved revenue per visit the most month over month?",
@@ -168,6 +173,7 @@ def chart_config_for_intent(intent: str, metric: str) -> Optional[Dict[str, Any]
         "metric_breakdown": {"type": "horizontal_bar", "x_key": "metric_value", "y_key": "location_name"},
         "derived_metric": {"type": "horizontal_bar", "x_key": "metric_value", "y_key": "location_name"},
         "budget_vs_actual": {"type": "horizontal_bar", "x_key": "attainment_pct", "y_key": "location_name"},
+        "category_breakdown": {"type": "horizontal_bar", "x_key": "revenue", "y_key": "category"},
     }
     base = configs.get(intent)
     if not base:

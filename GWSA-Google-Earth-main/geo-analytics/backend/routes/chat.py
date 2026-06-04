@@ -25,6 +25,7 @@ from ai.context import build_chart_envelope, data_gap_code
 from ai.followups import build_followups
 from ai.memory import SessionState, merge_session_after_turn, set_pending_followups
 from ai.planner import plan_request
+from ai.planner_heuristic import wants_response_style_hint
 from ai.responses import (
     chat_success_payload,
     correlation_timeframe_required_gap_body,
@@ -91,6 +92,22 @@ def _prepare_turn(data: dict) -> dict:
             'response_type': 'demo',
         })
 
+    if wants_response_style_hint(user_message):
+        merge_session_after_turn(session, {"intent": "style_hint", "metric": session.last_metric}, None, store_context)
+        return _immediate({
+            "reply": (
+                "Understood—I’ll use fuller multi-paragraph answers when you ask for overviews, category "
+                "breakdowns, or comparisons with a named month and stores. "
+                "Ask your next question that way (for example: “Draw a comparison chart for Bandera and "
+                "Culebra sales in April 2026”), and I’ll include the numbers plus a chart when you ask for one."
+            ),
+            "response_type": "answer",
+            "sql_used": None,
+            "data": None,
+            "session_state": session.to_payload(),
+            "plan_used": {"intent": "style_hint"},
+        })
+
     plan = plan_request(user_message, store_context, history, session=session)
     plan["_user_text"] = user_message
 
@@ -122,6 +139,22 @@ def _prepare_turn(data: dict) -> dict:
             "session_state": session.to_payload(),
             "followups": session.pending_followups,
             "plan_used": {"intent": "greeting"},
+        })
+
+    if plan.get("intent") == "style_hint":
+        merge_session_after_turn(session, {"intent": "style_hint"}, None, store_context)
+        return _immediate({
+            "reply": (
+                "Understood—I’ll use fuller multi-paragraph answers when you ask for overviews, category "
+                "breakdowns, or comparisons with a named month and stores. "
+                "Ask your next question that way (for example: “Draw a comparison chart for Bandera and "
+                "Culebra sales in April 2026”), and I’ll include the numbers plus a chart when you ask for one."
+            ),
+            "response_type": "answer",
+            "sql_used": None,
+            "data": None,
+            "session_state": session.to_payload(),
+            "plan_used": {"intent": "style_hint"},
         })
 
     if plan.get("intent") == "unsupported":

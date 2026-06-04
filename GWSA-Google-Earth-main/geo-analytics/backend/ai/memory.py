@@ -118,6 +118,28 @@ def resolve_references(
     if session.last_metric and "door" in low and "compare" not in low:
         extras.append("[User may be changing metric; prior metric was: {}.]".format(session.last_metric))
 
+    follow_triggers = (
+        "categor", "category", "both", "them", "those two", "the two", "same stores",
+        "add door", "door count", "same period", "same month", "chart", "graph",
+        "visualize", "plot", "go deeper", "more detail", "donations for",
+        "expense ratio", "revenue per visitor", "per visitor", "instead",
+        "monthly trend", "show me which", "explain the gap", "break down",
+        "compare them", "compare those", "for both", "for them", "what about",
+        "now show", "now add", "put that in", "full paragraph", "overview",
+    )
+    if session.last_store_names and any(tok in low for tok in follow_triggers):
+        names = ", ".join(session.last_store_names[:3])
+        extras.append(
+            f"[Follow-up: continue with the same store(s) from the prior turn: {names}. "
+            "Reuse the prior month/date range unless the user overrides it.]"
+        )
+
+    if session.last_timeframe and isinstance(session.last_timeframe, dict):
+        if any(tok in low for tok in ("same month", "same period", "that period", "for may instead", "for march instead")):
+            lbl = session.last_timeframe.get("label") or ""
+            if lbl:
+                extras.append(f"[Default timeframe from prior turn: {lbl}.]")
+
     if extras:
         text = text + "\n" + "\n".join(extras)
 

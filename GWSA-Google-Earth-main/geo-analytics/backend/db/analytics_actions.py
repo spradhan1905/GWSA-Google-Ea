@@ -15,6 +15,7 @@ from db.queries import (
     budget_vs_actual_summary_for_store,
     build_data_catalog,
     compare_locations,
+    compare_revenue_categories,
     compare_period_totals,
     donor_map_summary,
     get_donations,
@@ -23,6 +24,7 @@ from db.queries import (
     get_location_catalog,
     get_location_summary,
     get_revenue_door_count_series,
+    resolve_location_reference,
     multi_metric_snapshot,
     network_correlation_revenue_door,
     peak_store_daily_revenue,
@@ -204,6 +206,27 @@ def execute_approved_action(plan: dict, store_context: str) -> Tuple[Optional[st
         data = compare_locations(metric, refs, timeframe=timeframe)
         if data.get("locations") and len(data["locations"]) >= 2:
             selected_action = f"compare_locations:{metric}"
+
+    elif action == "category_breakdown":
+        if timeframe:
+            refs = []
+            for nm in list(plan.get("store_names") or []):
+                loc = resolve_location_reference(str(nm))
+                if loc:
+                    refs.append(str(loc["LocationID"]))
+            if plan.get("use_viewing_store") and viewing_location:
+                vid = str(viewing_location["LocationID"])
+                if vid not in refs:
+                    refs.append(vid)
+            if refs:
+                data = compare_revenue_categories(
+                    refs,
+                    timeframe["start"],
+                    timeframe["end"],
+                )
+                if data.get("stores"):
+                    data["timeframe"] = timeframe
+                    selected_action = "category_breakdown"
 
     elif action == "peak_store_daily_revenue":
         if timeframe:

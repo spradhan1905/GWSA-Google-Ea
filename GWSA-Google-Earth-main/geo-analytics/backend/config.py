@@ -114,6 +114,10 @@ class Config:
     AI_COMPOSER_TIMEOUT_SEC = max(3.0, min(AI_COMPOSER_TIMEOUT_SEC, 120.0))
     # Skip Azure OpenAI composer for straightforward factual answers (rankings, totals, budget).
     AI_USE_FAST_REPLY = _env_bool('AI_USE_FAST_REPLY', True)
+    # True = send max_completion_tokens (required on o-series / gpt-5 Azure deployments). False = max_tokens.
+    AZURE_OPENAI_USE_MAX_COMPLETION_TOKENS = _env_bool(
+        'AZURE_OPENAI_USE_MAX_COMPLETION_TOKENS', True
+    )
 
     # Azure OpenAI only (chat assistant)
     SECRET_KEY  = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-change-in-production')

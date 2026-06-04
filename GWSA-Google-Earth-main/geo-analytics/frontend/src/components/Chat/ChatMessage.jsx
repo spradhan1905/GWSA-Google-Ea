@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { Bot, User, Code, ChevronDown, ChevronRight } from 'lucide-react';
 import { sanitizeHtml } from '../../utils/sanitize';
+import ChatCompareChart from './ChatCompareChart';
 
 function renderMarkdown(text) {
   // Simple markdown: **bold**, bullet points, newlines
@@ -43,6 +44,10 @@ export default function ChatMessage({ message, onFollowupClick }) {
             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />
         ) : (
           <p className="text-sm leading-relaxed">{message.content}</p>
+        )}
+
+        {isAI && message.chart && (
+          <ChatCompareChart chart={message.chart} />
         )}
 
         {isAI && followups.length > 0 && onFollowupClick && (

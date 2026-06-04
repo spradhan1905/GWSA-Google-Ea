@@ -213,6 +213,56 @@ def parse_comparison_timeframes(user_message: str, today: date = None):
     return {"timeframe_a": tfa, "timeframe_b": tfb}
 
 
+def wants_response_style_hint(text: str) -> bool:
+    """Meta-instructions about answer length/style (not a data query)."""
+    t = (text or "").lower().strip()
+    if not t or len(t) > 160:
+        return False
+    return any(
+        x in t
+        for x in (
+            "more than one line",
+            "longer answer",
+            "longer responses",
+            "more detail in your",
+            "full paragraph",
+            "multi paragraph",
+            "stop being brief",
+            "write more",
+            "expand your answer",
+            "not just one line",
+        )
+    )
+
+
+def wants_chart(text: str) -> bool:
+    """User asked for a visual comparison or chart in chat."""
+    t = (text or "").lower()
+    return any(
+        x in t
+        for x in (
+            "graph", "chart", "plot", "visualize", "visualise",
+            "draw a", "draw the", "draw me", "bar chart", "line chart",
+        )
+    )
+
+
+def wants_store_comparison(text: str, store_count: int) -> bool:
+    """Two+ named stores and language that implies side-by-side comparison."""
+    if store_count < 2:
+        return False
+    t = (text or "").lower()
+    if any(h in t for h in COMPARE_HINTS):
+        return True
+    if wants_chart(t):
+        return True
+    if "comparison" in t and any(m in t for m in ("donation", "revenue", "sales", "door", "traffic")):
+        return True
+    if " and " in t and any(m in t for m in ("donation", "revenue", "sales", "door")):
+        return True
+    return False
+
+
 def detect_metric(user_message: str) -> str:
     text = (user_message or "").lower()
     if wants_budget_vs_actual(text):
@@ -276,8 +326,39 @@ def wants_derived_revenue_per_visit(text: str) -> bool:
     return "revenue per" in t or "sales per" in t or "per donor visit" in t or ("per visitor" in t or "per visit" in t) and ("revenue" in t or "sales" in t)
 
 
+def wants_category_breakdown(text: str) -> bool:
+    """Revenue Category / RevenueType mix (not the same as metric_breakdown by store)."""
+    t = (text or "").lower()
+    if "by store" in t and "categor" not in t and "revenue type" not in t:
+        return False
+    return any(
+        x in t
+        for x in (
+            "categor",
+            "revenue type",
+            "revenue types",
+            "line item",
+            "line items",
+            "subcategor",
+            "category mix",
+            "sales mix",
+            "what drove",
+            "contributing to",
+            "explain the gap",
+            "where is ",
+            " losing to ",
+            "not just the total",
+            "break down by category",
+            "breakdown by category",
+            "break it down by category",
+        )
+    )
+
+
 def wants_metric_breakdown(text: str) -> bool:
     t = text.lower()
+    if wants_category_breakdown(text):
+        return False
     if "rank" in t and "which store" not in text:
         return False
     if "top " in t and "store" in t:
@@ -303,12 +384,20 @@ def wants_donations_metric(text: str) -> bool:
         return False
     return (
         "donations" in t
+        or "donation count" in t
+        or "donation counts" in t
         or "donation amount" in t
         or "donation total" in t
         or "collected in donations" in t
         or (
             "donation" in t
-            and any(x in t for x in ("how much", "total", "collect", "average", "peak", "lowest", "rank", "compare"))
+            and any(
+                x in t
+                for x in (
+                    "how much", "total", "collect", "average", "peak", "lowest",
+                    "rank", "compare", "count", "graph", "chart",
+                )
+            )
         )
     )
 
@@ -574,13 +663,19 @@ def plan_request_heuristic(user_message: str, store_context: str, history: Optio
 
     unsupported_manager = ("who manage" in text or "which manager" in text or "store manager named" in text)
 
-    compare_ok = any(hint in text for hint in COMPARE_HINTS) and comparison_payload is None and (
-        len(store_names) >= 2 or (len(store_names) == 1 and use_viewing_store)
+    compare_ok = (
+        comparison_payload is None
+        and (len(store_names) >= 2 or (len(store_names) == 1 and use_viewing_store))
+        and wants_store_comparison(text_raw, len(store_names) + (1 if use_viewing_store else 0))
     )
     rank_ok = any(hint in text for hint in RANK_HINTS)
 
     if unsupported_manager:
         intent = "unsupported"
+        action = "none"
+
+    elif wants_response_style_hint(text_raw):
+        intent = "style_hint"
         action = "none"
 
     elif wants_data_catalog(text_raw):
@@ -627,6 +722,10 @@ def plan_request_heuristic(user_message: str, store_context: str, history: Optio
     elif wants_metric_breakdown(text_raw) and timeframe:
         intent = "metric_breakdown"
         action = "metric_breakdown"
+
+    elif wants_category_breakdown(text_raw) and timeframe:
+        intent = "category_breakdown"
+        action = "category_breakdown"
 
     elif compare_ok:
         action = "compare_locations"
@@ -678,6 +777,9 @@ def plan_request_heuristic(user_message: str, store_context: str, history: Optio
     if intent == "rank_locations" and action == "rank_locations" and _is_short_affirmation(text_raw):
         limit_out = max(limit_out, min(8, 10))
 
+    if intent == "compare_locations" and not timeframe:
+        timeframe = parse_timeframe(text_raw)
+
     return {
         "intent": intent,
         "action": action,
@@ -692,5 +794,6 @@ def plan_request_heuristic(user_message: str, store_context: str, history: Optio
         "trend_store_ref": trend_ref,
         "trend_store_ref_kind": trend_ref_kind,
         "comparison": comparison_payload,
+        "requires_chart": wants_chart(text_raw) and intent == "compare_locations",
         "_user_text": text_raw,
     }

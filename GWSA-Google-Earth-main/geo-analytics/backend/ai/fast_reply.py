@@ -143,7 +143,39 @@ def try_fast_reply(
             return f"For **{store}** in **{period}**, the strongest day for **{ml}** was **{best.get('date')}** at **{val_fmt}**."
         return f"For **{period}**, the top network day for **{ml}** was **{best.get('date')}** at **{val_fmt}**."
 
+    if da == "category_breakdown" or intent == "category_breakdown":
+        stores = list(data.get("stores") or [])
+        if not stores:
+            return None
+        period = _period_label(data, plan)
+        blocks = []
+        for st in stores[:3]:
+            cats = list(st.get("categories") or [])
+            if not cats:
+                continue
+            total = float(st.get("total_revenue") or 0) or sum(
+                float(c.get("revenue") or 0) for c in cats
+            )
+            name = st.get("location_name") or "Store"
+            lines = [f"**{name}** — **{_money(total)}** total for **{period}**:"]
+            for row in cats[:12]:
+                rev = float(row.get("revenue") or 0)
+                pct = round(100.0 * rev / total, 1) if total > 1e-9 else 0.0
+                lines.append(f"- {row.get('category')}: **{_money(rev)}** ({pct}% of store total)")
+            src = st.get("category_source") or data.get("source") or {}
+            grain = src.get("grain") or ""
+            if grain == "gp_sales_category":
+                lines.append("(Categories from GP line-level sales / SalesCategoryFromGP.)")
+            blocks.append("\n".join(lines))
+        if not blocks:
+            return None
+        if plan.get("requires_chart"):
+            return "\n\n".join(blocks) + "\n\nA comparison chart is included below."
+        return "\n\n".join(blocks)
+
     if da.startswith("compare_locations:"):
+        if plan.get("requires_chart"):
+            return None
         locs = list(data.get("locations") or [])
         if len(locs) < 2:
             return None
@@ -214,6 +246,13 @@ def try_fast_reply(
 
     if da == "data_catalog":
         desc = (data.get("description") or "")[:400]
-        return desc or None
+        examples = data.get("example_questions") or []
+        n_bank = data.get("question_bank_size") or 0
+        parts = [desc] if desc else []
+        if n_bank:
+            parts.append(f"I am trained on **{n_bank}** example retail analytics questions.")
+        if examples:
+            parts.append("You can ask things like: " + "; ".join(examples[:6]) + ".")
+        return " ".join(parts) if parts else None
 
     return None
