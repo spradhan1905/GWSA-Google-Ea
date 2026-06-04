@@ -8,6 +8,7 @@ import { RotateCcw, Ruler, Box } from 'lucide-react';
 import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
 import KmlOverlay from './KmlOverlay';
 import MedianIncomeLayer from './MedianIncomeLayer';
+import { getIsMobileMap, MOBILE_MAP_QUERY } from '../../utils/mapDevice';
 
 const MAP_CENTER = { lat: 29.4241, lng: -98.4936 };
 // Slightly closer default zoom so 3D buildings and roads feel crisper.
@@ -16,10 +17,9 @@ const MAP_ZOOM = 12;
 // Use Google's default satellite styling for a clean, modern look.
 // Leaving this array empty means we don't override Google's visual design.
 const MAP_STYLES = [];
-const MOBILE_MAP_QUERY = '(max-width: 639px)';
 
-function getIsMobileMap() {
-  return typeof window !== 'undefined' && window.matchMedia(MOBILE_MAP_QUERY).matches;
+function isSatelliteMapType(mapTypeId) {
+  return mapTypeId === 'hybrid' || mapTypeId === 'satellite';
 }
 
 function createMarkerSVG(type, isSelected) {
@@ -79,10 +79,27 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
   const [is3D, setIs3D] = useState(false);
   const [incomeLayerOn, setIncomeLayerOn] = useState(false);
   const [incomeLayerActive, setIncomeLayerActive] = useState(false);
+  const [isMobileMap, setIsMobileMap] = useState(getIsMobileMap);
+  const [mapTypeId, setMapTypeId] = useState('hybrid');
   const mapWrapRef = useRef(null);
   const measurePolylineRef = useRef(null);
   const measurePathRef = useRef([]);
   const measureClickListenerRef = useRef(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_MAP_QUERY);
+    const onChange = () => setIsMobileMap(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const handleSetMapType = useCallback((nextType) => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.setMapTypeId(nextType);
+    setMapTypeId(nextType);
+  }, []);
 
   // Initialize Google Map
   useEffect(() => {
@@ -112,6 +129,7 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
 
     mapInstanceRef.current = map;
     geocoderRef.current = new window.google.maps.Geocoder();
+    setMapTypeId(map.getMapTypeId() || 'hybrid');
     setMapReady(true);
   }, []);
 
@@ -136,6 +154,7 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
         });
         mapInstanceRef.current = map;
         geocoderRef.current = new window.google.maps.Geocoder();
+        setMapTypeId(map.getMapTypeId() || 'hybrid');
         setMapReady(true);
         clearInterval(interval);
       }
@@ -318,6 +337,36 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
   return (
     <div ref={mapWrapRef} className="absolute inset-0">
       <div ref={mapRef} className="w-full h-full" />
+      {mapReady && isMobileMap && (
+        <div
+          className="absolute top-3 left-3 z-20 flex rounded-lg border border-gray-300 bg-white shadow-md overflow-hidden text-xs font-medium"
+          role="group"
+          aria-label="Map type"
+        >
+          <button
+            type="button"
+            onClick={() => handleSetMapType('hybrid')}
+            className={`px-3 py-2 border-r border-gray-200 ${
+              isSatelliteMapType(mapTypeId)
+                ? 'bg-gray-100 text-gray-900'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Satellite
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetMapType('roadmap')}
+            className={`px-3 py-2 ${
+              mapTypeId === 'roadmap'
+                ? 'bg-gray-100 text-gray-900'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Map
+          </button>
+        </div>
+      )}
       {mapReady && (
         <div className="absolute top-3 right-3 flex flex-col gap-2 z-20">
           <button

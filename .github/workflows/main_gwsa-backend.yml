@@ -38,6 +38,7 @@ jobs:
           fi
           python scripts/build_texas_census_tract_layer.py
           test -f data/census/texas_tracts_acs.geojson
+          test -f data/census/texas_tracts_acs_metro.geojson
           test -f data/census/texas_tracts_acs.meta.json
           ls -lh data/census/
 

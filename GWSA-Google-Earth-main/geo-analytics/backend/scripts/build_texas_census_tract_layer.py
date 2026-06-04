@@ -34,6 +34,10 @@ except ImportError:
 
 from census.acs_client import fetch_texas_tract_metrics  # noqa: E402
 from census.acs_variables import ACS_VINTAGE  # noqa: E402
+from census.regions import (  # noqa: E402
+    SAN_ANTONIO_METRO_COUNTY_FIPS,
+    tract_county_fips,
+)
 from census.boundary_fetch import (  # noqa: E402
     download_tract_zip,
     extract_shapefile_from_zip,
@@ -43,6 +47,8 @@ from census.boundary_fetch import (  # noqa: E402
 OUT_DIR = BACKEND_ROOT / "data" / "census"
 GEOJSON_PATH = OUT_DIR / "texas_tracts_acs.geojson"
 GEOJSON_GZ_PATH = OUT_DIR / "texas_tracts_acs.geojson.gz"
+METRO_GEOJSON_PATH = OUT_DIR / "texas_tracts_acs_metro.geojson"
+METRO_GEOJSON_GZ_PATH = OUT_DIR / "texas_tracts_acs_metro.geojson.gz"
 META_PATH = OUT_DIR / "texas_tracts_acs.meta.json"
 METRICS_CACHE_PATH = OUT_DIR / "texas_tract_metrics_cache.json"
 
@@ -216,12 +222,29 @@ def main() -> None:
         if f["properties"].get("median_income")
     ]
 
+    metro_features = [
+        f
+        for f in features
+        if tract_county_fips(str((f.get("properties") or {}).get("geoid", "")))
+        in SAN_ANTONIO_METRO_COUNTY_FIPS
+    ]
+    metro_incomes = [
+        f["properties"]["median_income"]
+        for f in metro_features
+        if f["properties"].get("median_income")
+    ]
+
     fc = {"type": "FeatureCollection", "features": features}
+    metro_fc = {"type": "FeatureCollection", "features": metro_features}
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(GEOJSON_PATH, "w", encoding="utf-8") as fh:
         json.dump(fc, fh, separators=(",", ":"))
     with gzip.open(GEOJSON_GZ_PATH, "wt", encoding="utf-8") as fh:
         json.dump(fc, fh, separators=(",", ":"))
+    with open(METRO_GEOJSON_PATH, "w", encoding="utf-8") as fh:
+        json.dump(metro_fc, fh, separators=(",", ":"))
+    with gzip.open(METRO_GEOJSON_GZ_PATH, "wt", encoding="utf-8") as fh:
+        json.dump(metro_fc, fh, separators=(",", ":"))
 
     meta = {
         "geography": "census_tract",
@@ -245,14 +268,25 @@ def main() -> None:
             "boundaries": boundary_source,
         },
         "license": "Public domain (U.S. Census Bureau)",
+        "metro_scope": {
+            "name": "San Antonio metro",
+            "county_fips": sorted(SAN_ANTONIO_METRO_COUNTY_FIPS),
+            "feature_count": len(metro_features),
+            "income_breaks": _income_breaks(metro_incomes),
+            "geojson": METRO_GEOJSON_PATH.name,
+        },
     }
     with open(META_PATH, "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=2)
 
     size_mb = GEOJSON_PATH.stat().st_size / (1024 * 1024)
     gz_mb = GEOJSON_GZ_PATH.stat().st_size / (1024 * 1024)
+    metro_mb = METRO_GEOJSON_PATH.stat().st_size / (1024 * 1024)
+    metro_gz_mb = METRO_GEOJSON_GZ_PATH.stat().st_size / (1024 * 1024)
     print(f"Wrote {GEOJSON_PATH} ({size_mb:.1f} MB, {len(features)} tracts)")
     print(f"Wrote {GEOJSON_GZ_PATH} ({gz_mb:.1f} MB gzip)")
+    print(f"Wrote {METRO_GEOJSON_PATH} ({metro_mb:.1f} MB, {len(metro_features)} tracts)")
+    print(f"Wrote {METRO_GEOJSON_GZ_PATH} ({metro_gz_mb:.1f} MB gzip)")
     print(f"Wrote {META_PATH}")
 
 

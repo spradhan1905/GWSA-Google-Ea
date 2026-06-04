@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Layers, Loader2 } from 'lucide-react';
 import { fetchTexasTractIncomeLayer, fetchTexasTractIncomeMeta } from '../../services/api';
+import { getIsMobileMap } from '../../utils/mapDevice';
 
 /** Green ramp (low → high income), visible on satellite. */
 const INCOME_COLORS = [
@@ -19,8 +20,12 @@ const INCOME_COLORS = [
 const NO_DATA_FILL = 'rgba(148, 163, 184, 0.55)';
 const NO_DATA_STROKE = '#64748b';
 
-let sessionCache = null;
-let sessionLoadPromise = null;
+const sessionCache = { full: null, metro: null };
+const sessionLoadPromise = { full: null, metro: null };
+
+function censusLayerScope() {
+  return getIsMobileMap() ? 'metro' : 'full';
+}
 
 function formatMoney(n) {
   const v = Number(n);
@@ -58,17 +63,18 @@ function incomeColor(income, breaks) {
   return INCOME_COLORS[0];
 }
 
-async function loadCensusData() {
-  if (sessionCache) return sessionCache;
-  if (sessionLoadPromise) return sessionLoadPromise;
-  sessionLoadPromise = Promise.all([
-    fetchTexasTractIncomeMeta(),
-    fetchTexasTractIncomeLayer(),
+async function loadCensusData(scope) {
+  if (sessionCache[scope]) return sessionCache[scope];
+  if (sessionLoadPromise[scope]) return sessionLoadPromise[scope];
+  sessionLoadPromise[scope] = Promise.all([
+    fetchTexasTractIncomeMeta(scope),
+    fetchTexasTractIncomeLayer(scope),
   ]).then(([metaRes, geoRes]) => {
-    sessionCache = { meta: metaRes.data, geojson: geoRes.data };
-    return sessionCache;
+    const payload = { meta: metaRes.data, geojson: geoRes.data, scope };
+    sessionCache[scope] = payload;
+    return payload;
   });
-  return sessionLoadPromise;
+  return sessionLoadPromise[scope];
 }
 
 function HoverTooltip({ hover }) {
@@ -123,7 +129,9 @@ function MapLegend({ meta, hasNoData }) {
   return (
     <div className="absolute bottom-20 right-3 z-30 w-[200px] rounded-lg border border-gray-300 bg-white px-3 py-2.5 shadow-lg pointer-events-none">
       <p className="text-xs font-bold text-gray-900 mb-0.5">Median household income</p>
-      <p className="text-[10px] text-gray-600 mb-2">Darker green = higher · Hover a tract</p>
+      <p className="text-[10px] text-gray-600 mb-2">
+        {getIsMobileMap() ? 'Darker green = higher · Tap a tract' : 'Darker green = higher · Hover a tract'}
+      </p>
       <div className="space-y-1">
         {segments.map((seg, idx) => (
           <div key={idx} className="flex items-center gap-2 text-[10px] text-gray-800">
@@ -200,14 +208,21 @@ export default function MedianIncomeLayer({
     const attach = async () => {
       setLoading(true);
       setError(null);
+      const scope = censusLayerScope();
+      const touchMode = scope === 'metro';
       try {
-        const { meta: metaPayload, geojson } = await loadCensusData();
+        const { meta: metaPayload, geojson } = await loadCensusData(scope);
         if (cancelled || attachGenRef.current !== gen) return;
 
         metaRef.current = metaPayload;
         setMeta(metaPayload);
 
-        const anyNoData = (geojson.features || []).some(
+        const features = geojson.features || [];
+        if (!features.length) {
+          throw new Error('No census tracts in this area');
+        }
+
+        const anyNoData = features.some(
           (f) => !f.properties?.median_income || f.properties.median_income <= 0,
         );
         setHasNoDataTracts(anyNoData);
@@ -228,7 +243,7 @@ export default function MedianIncomeLayer({
             fillColor: incomeColor(income, breaks),
             fillOpacity: hasData ? 0.78 : 0.55,
             strokeColor: hasData ? '#166534' : NO_DATA_STROKE,
-            strokeWeight: 1.2,
+            strokeWeight: touchMode ? 1 : 1.2,
             strokeOpacity: 0.9,
             clickable: true,
             zIndex: 10,
@@ -248,33 +263,54 @@ export default function MedianIncomeLayer({
           if (feature) layer.revertStyle(feature);
         };
 
-        const showHover = (e) => {
+        const showAtEvent = (e) => {
           const dom = e.domEvent;
           if (!dom) return;
           const props = featureProps(e.feature);
-          setHover({ props, x: dom.clientX, y: dom.clientY });
+          const x = dom.clientX ?? dom.touches?.[0]?.clientX ?? window.innerWidth / 2;
+          const y = dom.clientY ?? dom.touches?.[0]?.clientY ?? window.innerHeight / 2;
+          setHover({ props, x, y });
         };
 
-        listenersRef.current.push(
-          layer.addListener('mouseover', (e) => {
-            if (hoveredRef.current && hoveredRef.current !== e.feature) {
-              unhighlight(hoveredRef.current);
-            }
-            hoveredRef.current = e.feature;
-            highlight(e.feature);
-            map.setOptions({ draggableCursor: 'pointer' });
-            showHover(e);
-          }),
-          layer.addListener('mousemove', (e) => {
-            if (hoveredRef.current === e.feature) showHover(e);
-          }),
-          layer.addListener('mouseout', (e) => {
-            unhighlight(e.feature);
-            if (hoveredRef.current === e.feature) hoveredRef.current = null;
-            setHover(null);
-            map.setOptions({ draggableCursor: null });
-          }),
-        );
+        if (touchMode) {
+          listenersRef.current.push(
+            layer.addListener('click', (e) => {
+              if (hoveredRef.current && hoveredRef.current !== e.feature) {
+                unhighlight(hoveredRef.current);
+              }
+              if (hoveredRef.current === e.feature) {
+                unhighlight(e.feature);
+                hoveredRef.current = null;
+                setHover(null);
+                return;
+              }
+              hoveredRef.current = e.feature;
+              highlight(e.feature);
+              showAtEvent(e);
+            }),
+          );
+        } else {
+          listenersRef.current.push(
+            layer.addListener('mouseover', (e) => {
+              if (hoveredRef.current && hoveredRef.current !== e.feature) {
+                unhighlight(hoveredRef.current);
+              }
+              hoveredRef.current = e.feature;
+              highlight(e.feature);
+              map.setOptions({ draggableCursor: 'pointer' });
+              showAtEvent(e);
+            }),
+            layer.addListener('mousemove', (e) => {
+              if (hoveredRef.current === e.feature) showAtEvent(e);
+            }),
+            layer.addListener('mouseout', (e) => {
+              unhighlight(e.feature);
+              if (hoveredRef.current === e.feature) hoveredRef.current = null;
+              setHover(null);
+              map.setOptions({ draggableCursor: null });
+            }),
+          );
+        }
 
         setReady(true);
       } catch (err) {
@@ -311,7 +347,11 @@ export default function MedianIncomeLayer({
         className={`bg-white border rounded-lg p-2 shadow-md transition-all hover:bg-gray-50 active:scale-95 ${
           enabled ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-300'
         }`}
-        title="Median income by census tract — hover for details"
+        title={
+          getIsMobileMap()
+            ? 'Median income (San Antonio area) — tap a tract'
+            : 'Median income by census tract — hover for details'
+        }
       >
         {loading ? (
           <Loader2 className="w-4 h-4 text-gray-800 animate-spin" />

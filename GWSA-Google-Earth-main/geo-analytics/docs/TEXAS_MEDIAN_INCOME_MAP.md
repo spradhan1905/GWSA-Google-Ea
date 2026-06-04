@@ -44,7 +44,8 @@ Area-level **median household income** for the whole state of Texas, with hover 
 
    Output files:
 
-   - `data/census/texas_tracts_acs.geojson`
+   - `data/census/texas_tracts_acs.geojson` (full Texas)
+   - `data/census/texas_tracts_acs_metro.geojson` (San Antonio metro counties — used on mobile)
    - `data/census/texas_tracts_acs.meta.json` (legend breaks, vintage)
 
 4. Restart the Flask API.
@@ -53,15 +54,18 @@ Area-level **median household income** for the whole state of Texas, with hover 
 
 1. Open the app map view.
 2. Click the **layers** control (stack icon) on the right toolbar.
-3. Hover any colored tract to see income and related metrics.
-4. Zoom out to see statewide patterns; zoom in for neighborhood detail.
+3. **Desktop:** hover a tract for income and related metrics.
+4. **Mobile:** tap a tract (loads San Antonio metro area only — avoids Safari memory crashes from the full-state file).
+5. Zoom out to see statewide patterns on desktop; mobile is limited to the metro layer.
 
 ## API (for other clients)
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/census/texas-tract-income/meta` | Vintage, metric list, legend breaks |
-| `GET /api/census/texas-tract-income` | GeoJSON `FeatureCollection` |
+| `GET /api/census/texas-tract-income/meta?scope=full\|metro` | Vintage, metric list, legend breaks |
+| `GET /api/census/texas-tract-income?scope=full\|metro` | GeoJSON `FeatureCollection` (gzip when supported) |
+
+**Mobile apps should use `scope=metro`.** Full Texas is ~100+ MB JSON and will crash mobile Safari.
 
 ## Refreshing data
 
@@ -69,8 +73,8 @@ Re-run the build script when a new ACS 5-year release ships (typically each Dece
 
 ## Production notes
 
-- The GeoJSON is large (~15–25 MB). Build on the server or in CI and deploy `data/census/` with the backend.
-- For faster loads later: simplify geometries further, serve vector tiles, or add a bbox filter endpoint.
+- Full-state GeoJSON is very large (~100+ MB). Build in CI and deploy both full and metro files with the backend.
+- GitHub Actions must run `build_texas_census_tract_layer.py` (see `AZURE_DEPLOYMENT.md`).
 
 ## License
 

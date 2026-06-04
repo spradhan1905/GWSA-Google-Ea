@@ -112,6 +112,12 @@ def create_app():
             "texas_tract_income_layer_built": (
                 Path(__file__).resolve().parent / "data" / "census" / "texas_tracts_acs.geojson"
             ).is_file(),
+            "texas_tract_income_metro_layer_built": (
+                Path(__file__).resolve().parent
+                / "data"
+                / "census"
+                / "texas_tracts_acs_metro.geojson"
+            ).is_file(),
         })
 
     return app

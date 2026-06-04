@@ -208,10 +208,18 @@ export const checkHealth = () => api.get('/health');
 /** Texas ACS tract layer (~7k polygons). Built via backend build script. */
 const CENSUS_LAYER_TIMEOUT_MS = 180000;
 
-export const fetchTexasTractIncomeMeta = () =>
-  api.get('/census/texas-tract-income/meta', { timeout: 30000 });
+/** @param {'full'|'metro'} scope */
+export const fetchTexasTractIncomeMeta = (scope = 'full') =>
+  api.get('/census/texas-tract-income/meta', {
+    timeout: 30000,
+    params: { scope },
+  });
 
-export const fetchTexasTractIncomeLayer = () =>
-  api.get('/census/texas-tract-income', { timeout: CENSUS_LAYER_TIMEOUT_MS });
+/** @param {'full'|'metro'} scope */
+export const fetchTexasTractIncomeLayer = (scope = 'full') =>
+  api.get('/census/texas-tract-income', {
+    timeout: CENSUS_LAYER_TIMEOUT_MS,
+    params: { scope },
+  });
 
 export default api;
