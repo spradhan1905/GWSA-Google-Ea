@@ -1,0 +1,30 @@
+{
+  "geography": "census_tract",
+  "state": "Texas",
+  "state_fips": "48",
+  "acs_vintage": "2023",
+  "dataset": "acs/acs5",
+  "feature_count": 6896,
+  "metrics": [
+    "median_income",
+    "median_income_moe",
+    "population",
+    "households",
+    "poverty_rate_pct",
+    "median_home_value",
+    "occupied_housing_units"
+  ],
+  "income_breaks": [
+    0,
+    49227,
+    63707,
+    79770,
+    106779,
+    250001
+  ],
+  "source": {
+    "income": "U.S. Census ACS 5-Year 2023",
+    "boundaries": "Census TIGERweb Tracts_Blocks MapServer (layer 0)"
+  },
+  "license": "Public domain (U.S. Census Bureau)"
+}

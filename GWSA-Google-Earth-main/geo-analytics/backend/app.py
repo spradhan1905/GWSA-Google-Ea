@@ -5,6 +5,7 @@ Full-stack geospatial analytics platform.
 v1.0 Demo
 """
 import os
+from pathlib import Path
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
@@ -57,6 +58,7 @@ def create_app():
     from routes.budget_vs_actual import budget_vs_actual_bp
     from routes.donations import donations_bp
     from routes.key_metrics import key_metrics_bp
+    from routes.census_layer import census_layer_bp
 
     app.register_blueprint(locations_bp)
     app.register_blueprint(financials_bp)
@@ -67,6 +69,7 @@ def create_app():
     app.register_blueprint(budget_vs_actual_bp)
     app.register_blueprint(donations_bp)
     app.register_blueprint(key_metrics_bp)
+    app.register_blueprint(census_layer_bp)
 
     # ─── Error Handlers ───────────────────────
     @app.errorhandler(429)
@@ -105,6 +108,10 @@ def create_app():
             "sql_sales_unit_name_flexible": Config.SQL_SALES_UNIT_NAME_FLEXIBLE,
             "sql_locations_minimal_join": Config.SQL_LOCATIONS_MINIMAL_JOIN,
             "locations_source": Config.LOCATIONS_SOURCE,
+            "census_api_key_configured": bool(Config.CENSUS_API_KEY),
+            "texas_tract_income_layer_built": (
+                Path(__file__).resolve().parent / "data" / "census" / "texas_tracts_acs.geojson"
+            ).is_file(),
         })
 
     return app

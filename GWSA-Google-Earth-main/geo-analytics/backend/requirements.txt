@@ -9,3 +9,5 @@ gunicorn==25.3.0
 # SQL Server. Pin Python ≤3.12 on Render (runtime.txt): pyodbc does not build on Python 3.14 yet.
 # Linux/Render Docker: SQL_DRIVER={ODBC Driver 18 for SQL Server}; Windows dev: often Driver 17.
 pyodbc==5.3.0
+# One-time / CI build for Texas census tract layer (scripts/build_texas_census_tract_layer.py)
+pyshp==2.3.1

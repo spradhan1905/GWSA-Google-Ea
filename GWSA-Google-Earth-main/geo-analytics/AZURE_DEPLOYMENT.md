@@ -50,6 +50,13 @@ Required environment variables:
 
 Use `SQL_TRUST_SERVER_CERTIFICATE=yes` only when your SQL Server certificate is not trusted yet, such as during early testing.
 
+Optional — census tract income layer (backend only, never frontend):
+- `CENSUS_API_KEY=your_census_gov_api_key` — only needed to **rebuild** `backend/data/census/texas_tracts_acs.geojson` on the server (or build locally and deploy the files). The running app serves pre-built GeoJSON and does not call Census on each map load.
+- Deploy `backend/data/census/texas_tracts_acs.geojson` and `texas_tracts_acs.meta.json` with the backend, or run `python scripts/build_texas_census_tract_layer.py` once on App Service (SSH/Kudu) with `CENSUS_API_KEY` set.
+- Confirm: `GET /api/health` → `texas_tract_income_layer_built: true`
+
+Do **not** add `CENSUS_API_KEY` to Static Web Apps / `VITE_*` variables — that would expose the key in the browser.
+
 ## Validation
 
 After deployment:

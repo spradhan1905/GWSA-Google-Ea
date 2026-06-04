@@ -50,15 +50,6 @@ const DEFAULT_PANEL_WIDTH = 440;
 const MIN_PANEL_WIDTH = 360;
 const DESKTOP_MEDIA_QUERY = '(min-width: 640px)';
 
-function monthSpanInclusive(startIso, endIso) {
-  if (!startIso || !endIso) return 12;
-  const start = new Date(`${startIso}T12:00:00`);
-  const end = new Date(`${endIso}T12:00:00`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 12;
-  const span = ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth()) + 1;
-  return Math.min(240, Math.max(1, span));
-}
-
 function rangeForPreset(presetLabel) {
   const today = new Date();
   let end = new Date(today);
@@ -193,17 +184,14 @@ export default function SidePanel({ location, open, onClose }) {
     setDonationsError(null);
     setKeyMetricsError(null);
 
+    let cancelled = false;
     const loadData = async () => {
       setLoading(true);
       try {
-        const rangeMonths = monthSpanInclusive(dateRange.start, dateRange.end);
-        const trendQuery =
-          financialsPreset === 'This Month'
-            ? { months: Math.max(24, rangeMonths) }
-            : { start: dateRange.start, end: dateRange.end };
         const usesDailyGrain =
           !isConsolidated && (financialsPreset === 'This Month' || financialsPreset === 'Custom');
         const budgetGrain = usesDailyGrain ? 'day' : 'month';
+        const usesMonthlyTrends = financialsPreset !== 'This Month';
         const kmPromise = isKeyMetricsEligible
           ? fetchKeyMetrics(location.id)
           : Promise.resolve({ data: null });
@@ -215,11 +203,14 @@ export default function SidePanel({ location, open, onClose }) {
           isConsolidated
             ? Promise.resolve({ data: [] })
             : fetchDoorCount(location.id, dateRange.start, dateRange.end),
-          fetchTrends(location.id, trendQuery),
+          usesMonthlyTrends
+            ? fetchTrends(location.id, { start: dateRange.start, end: dateRange.end })
+            : Promise.resolve({ data: [] }),
           fetchBudgetVsActual(location.id, dateRange.start, dateRange.end, { grain: budgetGrain }),
           fetchDonations(location.id, dateRange.start, dateRange.end),
           kmPromise,
         ]);
+        if (cancelled) return;
         if (finRes.status === 'fulfilled') setFinancials(finRes.value.data || []);
         if (bvaRes.status === 'fulfilled') {
           setBudgetVsActual(Array.isArray(bvaRes.value.data) ? bvaRes.value.data : []);
@@ -266,12 +257,15 @@ export default function SidePanel({ location, open, onClose }) {
           );
         }
       } catch (e) {
-        setError('Failed to load data. Please try again.');
+        if (!cancelled) setError('Failed to load data. Please try again.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     loadData();
+    return () => {
+      cancelled = true;
+    };
   }, [location?.id, dateRange.start, dateRange.end, financialsPreset, isConsolidated, isKeyMetricsEligible]);
 
   // Reset tab on new location
@@ -475,6 +469,8 @@ export default function SidePanel({ location, open, onClose }) {
                 <TrendsTab
                   data={trends}
                   preset={financialsPreset}
+                  rangeStart={dateRange.start}
+                  rangeEnd={dateRange.end}
                   financialsData={financials}
                   doorCountData={doorCount}
                   donationsData={donations}
@@ -917,7 +913,32 @@ function DoorCountTab({
   );
 }
 
-function TrendsTab({ data, preset, financialsData, doorCountData, donationsData = [], includeDoorCount = true }) {
+function monthInRange(periodMonth, rangeStart, rangeEnd) {
+  const mk = toMonthKey(periodMonth);
+  if (!mk) return false;
+  if (!rangeStart || !rangeEnd) return true;
+  const lo = toMonthKey(rangeStart);
+  const hi = toMonthKey(rangeEnd);
+  return lo && hi && mk >= lo && mk <= hi;
+}
+
+function dayInRange(dayIso, rangeStart, rangeEnd) {
+  if (!dayIso) return false;
+  if (!rangeStart || !rangeEnd) return true;
+  const key = String(dayIso).slice(0, 10);
+  return key >= rangeStart && key <= rangeEnd;
+}
+
+function TrendsTab({
+  data,
+  preset,
+  rangeStart,
+  rangeEnd,
+  financialsData,
+  doorCountData,
+  donationsData = [],
+  includeDoorCount = true,
+}) {
   const isThisMonth = preset === 'This Month';
   const DONATIONS_OPTION = { key: 'Donations', label: 'Donations', color: '#8B5CF6' };
   const metricOptions = isThisMonth
@@ -989,7 +1010,9 @@ function TrendsTab({ data, preset, financialsData, doorCountData, donationsData 
           current.Donations += Number(row.Donations || 0);
           byDate.set(key, current);
         });
-        return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+        return Array.from(byDate.values())
+          .filter((row) => dayInRange(row.date, rangeStart, rangeEnd))
+          .sort((a, b) => a.date.localeCompare(b.date));
       })()
     : (() => {
         // Monthly trends: prefer Donations from API (SQL monthly rollup); fallback to daily rows.
@@ -1002,7 +1025,9 @@ function TrendsTab({ data, preset, financialsData, doorCountData, donationsData 
             (donationsByMonth.get(monthKey) || 0) + Number(row.Donations || 0),
           );
         });
-        return data.map((d) => {
+        return data
+          .filter((d) => monthInRange(d.PeriodMonth, rangeStart, rangeEnd))
+          .map((d) => {
           const monthKey = toMonthKey(d.PeriodMonth);
           const donationsValue =
             d.Donations != null && d.Donations !== ''

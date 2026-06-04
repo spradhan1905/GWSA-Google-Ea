@@ -11,3 +11,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# Generated census tract GeoJSON (run scripts/build_texas_census_tract_layer.py)
+data/census/texas_tracts_acs.geojson
+data/census/texas_tracts_acs.geojson.gz
+data/census/texas_tract_metrics_cache.json

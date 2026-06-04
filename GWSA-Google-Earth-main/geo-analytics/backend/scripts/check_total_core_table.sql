@@ -18,12 +18,13 @@ SELECT
     MAX(CAST([Date] AS date)) AS latest_date
 FROM JS_API.dbo.TotalCoreTableFinal;
 
--- 3) Latest rows (see Unit, Category, RevenueType, Revenue)
+-- 3) Latest rows (see Unit, Sub_Category, Category, RevenueType, Revenue)
 SELECT TOP 25
     CAST([Date] AS date) AS [Date],
     [Revenue],
     [Unit],
     [sales unit name],
+    [Sub_Category],
     [Category],
     [RevenueType]
 FROM JS_API.dbo.TotalCoreTableFinal

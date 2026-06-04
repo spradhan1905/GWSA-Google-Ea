@@ -24,6 +24,9 @@ class Config:
     ENABLE_AI = _env_bool('ENABLE_AI', True)
     ENABLE_KPIS = _env_bool('ENABLE_KPIS', True)
 
+    # U.S. Census Data API (build Texas tract income layer — optional until map layer is used)
+    CENSUS_API_KEY = (os.environ.get('CENSUS_API_KEY') or '').strip()
+
     # SQL Server
     SQL_SERVER   = os.environ.get('SQL_SERVER', 'localhost')
     SQL_DATABASE = os.environ.get('SQL_DATABASE', 'GWSA_Analytics')

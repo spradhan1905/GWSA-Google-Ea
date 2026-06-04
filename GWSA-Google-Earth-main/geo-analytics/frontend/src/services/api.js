@@ -205,4 +205,13 @@ export const streamChatMessage = (
 
 export const checkHealth = () => api.get('/health');
 
+/** Texas ACS tract layer (~7k polygons). Built via backend build script. */
+const CENSUS_LAYER_TIMEOUT_MS = 180000;
+
+export const fetchTexasTractIncomeMeta = () =>
+  api.get('/census/texas-tract-income/meta', { timeout: 30000 });
+
+export const fetchTexasTractIncomeLayer = () =>
+  api.get('/census/texas-tract-income', { timeout: CENSUS_LAYER_TIMEOUT_MS });
+
 export default api;

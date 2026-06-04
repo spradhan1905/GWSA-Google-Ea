@@ -1539,7 +1539,7 @@ def _trends_month_filters(
             "DATEFROMPARTS(d.[Year], d.[Month], 1) <= "
             "DATEFROMPARTS(YEAR(CAST(? AS DATE)), MONTH(CAST(? AS DATE)), 1)"
         )
-        return month_window_start, month_window_end, (start_date, end_date)
+        return month_window_start, month_window_end, (start_date, start_date, end_date, end_date)
     month_window_start = (
         "DATEFROMPARTS(d.[Year], d.[Month], 1) >= "
         "DATEADD(MONTH, 1 - ?, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))"

@@ -7,6 +7,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RotateCcw, Ruler, Box } from 'lucide-react';
 import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
 import KmlOverlay from './KmlOverlay';
+import MedianIncomeLayer from './MedianIncomeLayer';
 
 const MAP_CENTER = { lat: 29.4241, lng: -98.4936 };
 // Slightly closer default zoom so 3D buildings and roads feel crisper.
@@ -76,6 +77,9 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
   const [mapReady, setMapReady] = useState(false);
   const [activeTool, setActiveTool] = useState('none'); // 'none' | 'measure'
   const [is3D, setIs3D] = useState(false);
+  const [incomeLayerOn, setIncomeLayerOn] = useState(false);
+  const [incomeLayerActive, setIncomeLayerActive] = useState(false);
+  const mapWrapRef = useRef(null);
   const measurePolylineRef = useRef(null);
   const measurePathRef = useRef([]);
   const measureClickListenerRef = useRef(null);
@@ -210,6 +214,8 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
           icon: getMarkerIcon(loc.type, isSelected),
           zIndex: isSelected ? 1000 : 1,
           animation: isSelected ? window.google.maps.Animation.BOUNCE : null,
+          clickable: !incomeLayerActive,
+          optimized: false,
         });
 
         if (isSelected) {
@@ -243,7 +249,7 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
         });
       }
     });
-  }, [locations, selectedLocation, mapReady, onPinClick]);
+  }, [locations, selectedLocation, mapReady, onPinClick, incomeLayerActive]);
 
   // Pan to selected location
   useEffect(() => {
@@ -310,14 +316,14 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
   }, [locations, onPinClick]);
 
   return (
-    <div className="absolute inset-0">
+    <div ref={mapWrapRef} className="absolute inset-0">
       <div ref={mapRef} className="w-full h-full" />
       {mapReady && (
-        <div className="absolute top-3 right-3 flex flex-col gap-2 z-20 animate-fade-in">
+        <div className="absolute top-3 right-3 flex flex-col gap-2 z-20">
           <button
             type="button"
             onClick={handleResetView}
-            className="bg-gwsa-surface/95 backdrop-blur border border-gwsa-border rounded-lg p-2 shadow-panel transition-all duration-200 hover:bg-gwsa-surface-hover hover:-translate-y-0.5 active:scale-95"
+            className="bg-white border border-gray-300 rounded-lg p-2 shadow-md hover:bg-gray-50 active:scale-95"
             title="Reset view"
           >
             <RotateCcw className="w-4 h-4 text-gwsa-text" />
@@ -325,10 +331,10 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
           <button
             type="button"
             onClick={handleToggle3D}
-            className={`bg-gwsa-surface/95 backdrop-blur border rounded-lg p-2 shadow-panel transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
+            className={`bg-white border rounded-lg p-2 shadow-md hover:bg-gray-50 active:scale-95 ${
               is3D
-                ? 'border-gwsa-accent bg-gwsa-accent/10'
-                : 'border-gwsa-border hover:bg-gwsa-surface-hover'
+                ? 'border-blue-500 ring-2 ring-blue-200'
+                : 'border-gray-300'
             }`}
             title="Toggle 3D tilt"
           >
@@ -337,15 +343,22 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
           <button
             type="button"
             onClick={() => setActiveTool(activeTool === 'measure' ? 'none' : 'measure')}
-            className={`bg-gwsa-surface/95 backdrop-blur border rounded-lg p-2 shadow-panel transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
+            className={`bg-white border rounded-lg p-2 shadow-md hover:bg-gray-50 active:scale-95 ${
               activeTool === 'measure'
-                ? 'border-gwsa-accent bg-gwsa-accent/10'
-                : 'border-gwsa-border hover:bg-gwsa-surface-hover'
+                ? 'border-blue-500 ring-2 ring-blue-200'
+                : 'border-gray-300'
             }`}
             title="Measure distance"
           >
             <Ruler className="w-4 h-4 text-gwsa-text" />
           </button>
+          <MedianIncomeLayer
+            map={mapInstanceRef.current}
+            enabled={incomeLayerOn}
+            onEnabledChange={setIncomeLayerOn}
+            mapPortalRef={mapWrapRef}
+            onLayerActiveChange={setIncomeLayerActive}
+          />
           {activeTool === 'measure' && window.google?.maps?.geometry && (
             <div className="mt-1 px-2 py-1 rounded bg-gwsa-surface/95 border border-gwsa-border text-[11px] text-gwsa-text shadow-panel">
               <span>
