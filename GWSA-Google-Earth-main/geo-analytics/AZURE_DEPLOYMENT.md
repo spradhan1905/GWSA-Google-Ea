@@ -50,12 +50,28 @@ Required environment variables:
 
 Use `SQL_TRUST_SERVER_CERTIFICATE=yes` only when your SQL Server certificate is not trusted yet, such as during early testing.
 
-Optional — census tract income layer (backend only, never frontend):
-- `CENSUS_API_KEY=your_census_gov_api_key` — only needed to **rebuild** `backend/data/census/texas_tracts_acs.geojson` on the server (or build locally and deploy the files). The running app serves pre-built GeoJSON and does not call Census on each map load.
-- Deploy `backend/data/census/texas_tracts_acs.geojson` and `texas_tracts_acs.meta.json` with the backend, or run `python scripts/build_texas_census_tract_layer.py` once on App Service (SSH/Kudu) with `CENSUS_API_KEY` set.
-- Confirm: `GET /api/health` → `texas_tract_income_layer_built: true`
+### Census tract income layer (important)
 
-Do **not** add `CENSUS_API_KEY` to Static Web Apps / `VITE_*` variables — that would expose the key in the browser.
+The map calls `GET /api/census/texas-tract-income`. A **404 "Census layer not built"** means the GeoJSON files are missing on the server — **not** that the route is wrong.
+
+The data files are **gitignored** and are **built during CI**, not read from Census at runtime.
+
+1. **GitHub Actions secret (required for deploy)**  
+   Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**  
+   - Name: `CENSUS_API_KEY`  
+   - Value: your key from https://api.census.gov/data/key_signup.html  
+
+2. **Azure App Service `CENSUS_API_KEY` (optional)**  
+   Only needed if you rebuild on the server via SSH/Kudu. The GitHub workflow builds the layer before deploy.
+
+3. **Redeploy**  
+   Push to `main` (or run workflow **Build and deploy Python app to Azure Web App - GWSA-backend** manually). The workflow runs `scripts/build_texas_census_tract_layer.py` (~3–8 min) and uploads `data/census/*.geojson` with the app.
+
+4. **Verify**  
+   - `https://YOUR-BACKEND.azurewebsites.net/api/health` → `"texas_tract_income_layer_built": true`  
+   - `https://YOUR-BACKEND.azurewebsites.net/api/census/texas-tract-income/meta` → JSON (not 404)
+
+Do **not** put `CENSUS_API_KEY` in Static Web Apps / `VITE_*` — that exposes the key in the browser.
 
 ## Validation
 

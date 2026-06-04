@@ -23,13 +23,23 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Create virtual environment and install backend dependencies
+      - name: Create virtual environment, install deps, build census layer
         working-directory: ${{ env.BACKEND_PATH }}
+        env:
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
         run: |
           python -m venv antenv
           source antenv/bin/activate
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          if [ -z "$CENSUS_API_KEY" ]; then
+            echo "::error::CENSUS_API_KEY GitHub secret is missing. Add it under repo Settings → Secrets → Actions."
+            exit 1
+          fi
+          python scripts/build_texas_census_tract_layer.py
+          test -f data/census/texas_tracts_acs.geojson
+          test -f data/census/texas_tracts_acs.meta.json
+          ls -lh data/census/
 
       - name: Upload backend artifact for deployment
         uses: actions/upload-artifact@v4
