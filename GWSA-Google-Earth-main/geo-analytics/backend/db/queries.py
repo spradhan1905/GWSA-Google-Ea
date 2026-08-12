@@ -40,8 +40,8 @@ def _validated_sales_line_object() -> str:
     return name
 
 
-def _validated_retail_monthly_financial_object() -> str:
-    """Quarter / YTD / 12 Months: JS_API.dbo.RetailStoreMonthlyFinancialSummary (or env override)."""
+def _validated_retail_monthly_single_object() -> str:
+    """Single monthly table/view when Sage merge is disabled."""
     name = (Config.SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT or "").strip()
     if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
         raise ValueError(
@@ -51,8 +51,153 @@ def _validated_retail_monthly_financial_object() -> str:
     return name
 
 
+def _validated_retail_monthly_financial_object() -> str:
+    """Monthly financial source label (legacy table, or legacy+Sage when merge is enabled)."""
+    if Config.SQL_SAGE_MERGE_ENABLED:
+        return (
+            f"{_validated_retail_monthly_legacy_object()}"
+            f"+{_validated_gl_combined_object()}(from {_sage_cutover_date_sql()})"
+        )
+    return _validated_retail_monthly_single_object()
+
+
+def _validated_retail_monthly_legacy_object() -> str:
+    """Pre-Sage GP/Vena monthly rollup table."""
+    name = (
+        Config.SQL_RETAIL_MONTHLY_FINANCIAL_LEGACY_OBJECT
+        or Config.SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT
+        or "JS_API.dbo.RetailStoreMonthlyFinancialSummary"
+    ).strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
+        raise ValueError(
+            "SQL_RETAIL_MONTHLY_FINANCIAL_LEGACY_OBJECT must be set "
+            "(e.g. JS_API.dbo.RetailStoreMonthlyFinancialSummary)"
+        )
+    return name
+
+
+def _validated_gl_combined_object() -> str:
+    """Sage GL transaction feed (rolled up to monthly P&L from SQL_SAGE_CUTOVER_DATE)."""
+    name = (Config.SQL_GL_COMBINED_OBJECT or "").strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
+        raise ValueError(
+            "SQL_GL_COMBINED_OBJECT must be set "
+            "(e.g. JS_API.dbo.GL_Combined_Transactions_With_UnitGroup)"
+        )
+    return name
+
+
+def _sage_cutover_date_sql() -> str:
+    """ISO cutover date (first Sage month); validated for safe embedding in SQL text."""
+    raw = (Config.SQL_SAGE_CUTOVER_DATE or "2026-07-01").strip()[:10]
+    date.fromisoformat(raw)
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+        raise ValueError(f"SQL_SAGE_CUTOVER_DATE must be YYYY-MM-DD, got {raw!r}")
+    return raw
+
+
+def _gl_account_id_sql(alias: str = "gl") -> str:
+    return f"TRY_CAST({alias}.glAccount_id AS INT)"
+
+
+def _gl_signed_amount_sql(alias: str = "gl") -> str:
+    """Revenue credits increase balance; expense debits increase balance."""
+    aid = _gl_account_id_sql(alias)
+    rev_min = Config.SQL_GL_REVENUE_ACCOUNT_MIN
+    rev_max = Config.SQL_GL_REVENUE_ACCOUNT_MAX
+    return f"""
+    CASE
+        WHEN {aid} >= {rev_min} AND {aid} < {rev_max}
+            THEN CAST(ISNULL({alias}.Credit, 0) - ISNULL({alias}.Debit, 0) AS DECIMAL(18, 4))
+        ELSE CAST(ISNULL({alias}.Debit, 0) - ISNULL({alias}.Credit, 0) AS DECIMAL(18, 4))
+    END
+    """
+
+
+def _gl_metric_amount_sql(alias: str, metric: str) -> str:
+    aid = _gl_account_id_sql(alias)
+    amt = _gl_signed_amount_sql(alias)
+    ranges = {
+        "revenue": (Config.SQL_GL_REVENUE_ACCOUNT_MIN, Config.SQL_GL_REVENUE_ACCOUNT_MAX),
+        "opex": (Config.SQL_GL_OPEX_ACCOUNT_MIN, Config.SQL_GL_OPEX_ACCOUNT_MAX),
+        "personnel": (Config.SQL_GL_PERSONNEL_ACCOUNT_MIN, Config.SQL_GL_PERSONNEL_ACCOUNT_MAX),
+    }
+    lo, hi = ranges[metric]
+    return f"CASE WHEN {aid} >= {lo} AND {aid} < {hi} THEN {amt} ELSE 0 END"
+
+
+def _sage_gl_data_source_filter_sql(alias: str = "gl") -> str:
+    ds = (Config.SQL_GL_SAGE_DATA_SOURCE or "").strip()
+    if not ds:
+        return ""
+    safe = ds.replace("'", "''")
+    return (
+        f" AND LTRIM(RTRIM(CAST({alias}.[Data_Source] AS NVARCHAR(200)))) "
+        f"= N'{safe}' "
+    )
+
+
+def _sage_gl_monthly_rollup_subquery() -> str:
+    """Aggregate Sage GL transactions to the legacy monthly column shape."""
+    gl = _validated_gl_combined_object()
+    cutover = _sage_cutover_date_sql()
+    rev = _gl_metric_amount_sql("gl", "revenue")
+    opex = _gl_metric_amount_sql("gl", "opex")
+    personnel = _gl_metric_amount_sql("gl", "personnel")
+    ds_filter = _sage_gl_data_source_filter_sql("gl")
+    return f"""
+    SELECT
+        YEAR(CAST(gl.entryDate AS DATE)) AS [Year],
+        MONTH(CAST(gl.entryDate AS DATE)) AS [Month],
+        LTRIM(RTRIM(CAST(gl.[sales unit name] AS NVARCHAR(500)))) AS [Unit Name],
+        CAST(SUM({rev}) AS DECIMAL(18, 4)) AS [Total Revenue],
+        CAST(SUM({opex}) AS DECIMAL(18, 4)) AS [Total Operating Expenses],
+        CAST(SUM({personnel}) AS DECIMAL(18, 4)) AS [Total Personnel Expenses],
+        CAST(
+            SUM({rev}) - SUM({opex}) - SUM({personnel})
+            AS DECIMAL(18, 4)
+        ) AS [Net Income]
+    FROM {gl} AS gl
+    WHERE CAST(gl.entryDate AS DATE) >= CAST('{cutover}' AS DATE)
+      AND LTRIM(RTRIM(CAST(gl.[sales unit name] AS NVARCHAR(500)))) <> N''
+      {ds_filter}
+    GROUP BY
+        YEAR(CAST(gl.entryDate AS DATE)),
+        MONTH(CAST(gl.entryDate AS DATE)),
+        LTRIM(RTRIM(CAST(gl.[sales unit name] AS NVARCHAR(500))))
+    """
+
+
+def _merged_monthly_financial_union_sql() -> str:
+    """Legacy months before cutover + Sage GL months from cutover onward."""
+    legacy = _validated_retail_monthly_legacy_object()
+    cutover = _sage_cutover_date_sql()
+    sage = _sage_gl_monthly_rollup_subquery()
+    return f"""
+    SELECT
+        d.[Year],
+        d.[Month],
+        d.[Unit Name],
+        d.[Total Revenue],
+        d.[Total Operating Expenses],
+        d.[Total Personnel Expenses],
+        d.[Net Income]
+    FROM {legacy} AS d
+    WHERE DATEFROMPARTS(d.[Year], d.[Month], 1) < CAST('{cutover}' AS DATE)
+    UNION ALL
+    {sage}
+    """
+
+
+def _monthly_financial_from_clause() -> str:
+    """FROM target for monthly financial queries (single legacy table or merged union)."""
+    if not Config.SQL_SAGE_MERGE_ENABLED:
+        return f"{_validated_retail_monthly_single_object()} AS d"
+    return f"({_merged_monthly_financial_union_sql()}) AS d"
+
+
 def _validated_budget_vs_actual_object() -> str:
-    """Actual vs Budget daily Core revenue: JS_API.dbo.DailyCoreRevenueBudgetVsActual_NoSubCategory (or env override)."""
+    """Legacy combined Actual vs Budget table (used when SQL_BUDGET_VS_ACTUAL_SPLIT=False)."""
     name = (Config.SQL_BUDGET_VS_ACTUAL_OBJECT or "").strip()
     if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
         raise ValueError(
@@ -60,6 +205,26 @@ def _validated_budget_vs_actual_object() -> str:
             "(e.g. JS_API.dbo.DailyCoreRevenueBudgetVsActual_NoSubCategory)"
         )
     return name
+
+
+def _validated_daily_revenue_budget_object() -> str:
+    """Daily budget targets: JS_API.dbo.DailyRevenueBudget (or env override)."""
+    name = (Config.SQL_DAILY_REVENUE_BUDGET_OBJECT or "").strip()
+    if not name or not re.fullmatch(r"[A-Za-z0-9_\[\].]+", name):
+        raise ValueError(
+            "SQL_DAILY_REVENUE_BUDGET_OBJECT must be set "
+            "(e.g. JS_API.dbo.DailyRevenueBudget)"
+        )
+    return name
+
+
+def _budget_vs_actual_source_label() -> str:
+    if Config.SQL_BUDGET_VS_ACTUAL_SPLIT:
+        return (
+            f"{_validated_this_month_revenue_object()}"
+            f"+{_validated_daily_revenue_budget_object()}"
+        )
+    return _validated_budget_vs_actual_object()
 
 
 def _validated_locations_table() -> str:
@@ -342,8 +507,8 @@ def get_locations() -> list:
 def get_financials(store_id: str, start_date: str, end_date: str, this_month: bool = False) -> list:
     """
     If this_month is True: daily Core Sales revenue from TotalCoreTableFinal.
-    Otherwise: monthly rollup from RetailStoreMonthlyFinancialSummary (Quarter / YTD / 12 Months / Custom),
-    matched by [Unit Name] to static LocationName or dbo.Locations.LocationName.
+    Otherwise: monthly rollup — legacy RetailStoreMonthlyFinancialSummary before SQL_SAGE_CUTOVER_DATE,
+    plus Sage GL (GL_Combined_Transactions_With_UnitGroup) from cutover onward when SQL_SAGE_MERGE_ENABLED.
     """
     if this_month and _is_consolidated_location(store_id):
         return []
@@ -529,8 +694,8 @@ def _retail_monthly_select_columns() -> str:
 
 
 def _get_financials_retail_monthly(store_id: str, start_date: str, end_date: str) -> list:
-    """Monthly rows from RetailStoreMonthlyFinancialSummary for the requested calendar-month span."""
-    obj = _validated_retail_monthly_financial_object()
+    """Monthly rows: legacy rollup and/or Sage GL (see SQL_SAGE_MERGE_ENABLED / SQL_SAGE_CUTOVER_DATE)."""
+    from_clause = _monthly_financial_from_clause()
     month_lo = (
         "DATEFROMPARTS(d.[Year], d.[Month], 1) >= "
         "DATEFROMPARTS(YEAR(CAST(? AS DATE)), MONTH(CAST(? AS DATE)), 1)"
@@ -546,7 +711,7 @@ def _get_financials_retail_monthly(store_id: str, start_date: str, end_date: str
         sql = f"""
             SELECT
                 {cols}
-            FROM {obj} AS d
+            FROM {from_clause}
             WHERE {month_lo}
               AND {month_hi}
             GROUP BY d.[Year], d.[Month]
@@ -567,7 +732,7 @@ def _get_financials_retail_monthly(store_id: str, start_date: str, end_date: str
         sql = f"""
             SELECT
                 {cols}
-            FROM {obj} AS d
+            FROM {from_clause}
             WHERE {month_lo}
               AND {month_hi}
             {unit_sql}
@@ -582,7 +747,7 @@ def _get_financials_retail_monthly(store_id: str, start_date: str, end_date: str
     sql = f"""
         SELECT
             {cols}
-        FROM {obj} AS d
+        FROM {from_clause}
         INNER JOIN {loc_tbl} AS loc
           ON loc.LocationID = ?
         {join_name}
@@ -631,6 +796,35 @@ def _budget_period_grain_sql(grain: str) -> Tuple[str, str, str]:
     )
 
 
+def _period_expr_from_date_sql(date_sql: str, grain: str) -> str:
+    """Bucket a date expression to day or month-start for Actual vs Budget series."""
+    if (grain or "day").lower() == "month":
+        return f"DATEFROMPARTS(YEAR({date_sql}), MONTH({date_sql}), 1)"
+    return date_sql
+
+
+def _normalize_period_key(value) -> Optional[str]:
+    """Normalize SQL date / datetime / string to YYYY-MM-DD for series merge."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    s = str(value).strip()
+    if not s:
+        return None
+    return s[:10]
+
+
+def _period_bucket_key(iso_day: str, grain: str) -> str:
+    """Map an ISO day to day or month-start key."""
+    d = date.fromisoformat(iso_day[:10])
+    if (grain or "day").lower() == "month":
+        return date(d.year, d.month, 1).isoformat()
+    return d.isoformat()
+
+
 def _budget_unit_filter_static(store_id: str) -> Optional[Tuple[str, tuple]]:
     """
     WHERE fragment + params to scope the budget table to one app store (static mode).
@@ -663,13 +857,157 @@ def _budget_unit_filter_static(store_id: str) -> Optional[Tuple[str, tuple]]:
     return _sales_unit_name_predicate_sql(unit)
 
 
+def _get_actual_core_series(
+    store_id: str, start_date: str, end_date: str, grain: str
+) -> Dict[str, float]:
+    """
+    Actual Core revenue by period from TotalCoreTableFinal.
+    Returns {PeriodDate ISO -> ActualRevenue}.
+    """
+    out: Dict[str, float] = {}
+
+    if _is_consolidated_location(store_id):
+        obj = _validated_this_month_revenue_object()
+        cat_sql, cat_params = _total_core_category_filter_sql()
+        period_sql = _period_expr_from_date_sql(TOTAL_CORE_DATE_SQL, grain)
+        sql = f"""
+            SELECT
+                {period_sql} AS PeriodDate,
+                CAST(SUM(ISNULL(CAST(d.[Revenue] AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) AS ActualRevenue
+            FROM {obj} AS d
+            WHERE {TOTAL_CORE_DATE_SQL} >= CAST(? AS DATE)
+              AND {TOTAL_CORE_DATE_SQL} <= CAST(? AS DATE)
+            {cat_sql}
+            GROUP BY {period_sql}
+            ORDER BY PeriodDate
+        """
+        for row in _execute_query(sql, (start_date, end_date, *cat_params)):
+            key = _normalize_period_key(row.get("PeriodDate"))
+            if key:
+                out[key] = _coerce_number(row.get("ActualRevenue"))
+        return out
+
+    # Per-store: reuse MTD TotalCore matching (works for any date range, not only this month).
+    for row in get_financials(store_id, start_date, end_date, this_month=True):
+        day = _normalize_period_key(row.get("SalesDate"))
+        if not day:
+            continue
+        key = _period_bucket_key(day, grain)
+        out[key] = out.get(key, 0.0) + _coerce_number(row.get("NetRevenue"))
+    return {k: round(v, 2) for k, v in out.items()}
+
+
+def _get_budget_core_series(
+    store_id: str, start_date: str, end_date: str, grain: str
+) -> Dict[str, float]:
+    """
+    Budget Core revenue by period from DailyRevenueBudget.
+    Returns {PeriodDate ISO -> BudgetRevenue}.
+    """
+    obj = _validated_daily_revenue_budget_object()
+    cat_sql, cat_params = _budget_category_filter_sql()
+    date_sql = "CAST(d.[BudgetDate] AS DATE)"
+    period_sql = _period_expr_from_date_sql(date_sql, grain)
+    date_filter = f"{date_sql} >= CAST(? AS DATE) AND {date_sql} <= CAST(? AS DATE)"
+    sum_budget = (
+        "CAST(SUM(ISNULL(CAST(d.[DailyBudgetValue] AS DECIMAL(18, 4)), 0)) AS DECIMAL(18, 2)) "
+        "AS BudgetRevenue"
+    )
+
+    if _is_consolidated_location(store_id):
+        sql = f"""
+            SELECT
+                {period_sql} AS PeriodDate,
+                {sum_budget}
+            FROM {obj} AS d
+            WHERE {date_filter}
+            {cat_sql}
+            GROUP BY {period_sql}
+            ORDER BY PeriodDate
+        """
+        rows = _execute_query(sql, (start_date, end_date, *cat_params))
+    elif Config.LOCATIONS_SOURCE == "static":
+        unit_filter = _budget_unit_filter_static(store_id)
+        if unit_filter is None:
+            return {}
+        unit_sql, unit_params = unit_filter
+        sql = f"""
+            SELECT
+                {period_sql} AS PeriodDate,
+                {sum_budget}
+            FROM {obj} AS d
+            WHERE {date_filter}
+            {cat_sql}
+            {unit_sql}
+            GROUP BY {period_sql}
+            ORDER BY PeriodDate
+        """
+        rows = _execute_query(sql, (start_date, end_date, *cat_params, *unit_params))
+    else:
+        loc_tbl = _validated_locations_table()
+        sid = (store_id or "").strip()
+        join_pred = _total_core_join_pred_database()
+        sql = f"""
+            SELECT
+                {period_sql} AS PeriodDate,
+                {sum_budget}
+            FROM {obj} AS d
+            INNER JOIN {loc_tbl} AS loc
+              ON loc.LocationID = ?
+            {join_pred}
+            WHERE {date_filter}
+            {cat_sql}
+            GROUP BY {period_sql}
+            ORDER BY PeriodDate
+        """
+        rows = _execute_query(sql, (sid, start_date, end_date, *cat_params))
+
+    out: Dict[str, float] = {}
+    for row in rows:
+        key = _normalize_period_key(row.get("PeriodDate"))
+        if key:
+            out[key] = _coerce_number(row.get("BudgetRevenue"))
+    return out
+
+
 def get_budget_vs_actual(store_id: str, start_date: str, end_date: str, grain: str = "day") -> list:
     """
-    Actual vs Budget Core revenue from DailyCoreRevenueBudgetVsActual_NoSubCategory.
+    Actual vs Budget Core revenue.
+    Default (SQL_BUDGET_VS_ACTUAL_SPLIT=True): Actual from TotalCoreTableFinal,
+    Budget from DailyRevenueBudget — survives Sage cutover (combined NoSubCategory table stalled ~2026-06-07).
     grain='day'  -> one row per calendar day (This Month / Custom).
-    grain='month' -> one row per Year/Month (Rolling 3 months / YTD / 12 Months) to avoid crowding.
+    grain='month' -> one row per Year/Month (Rolling 3 months / YTD / 12 Months).
     Each row: { PeriodDate, ActualRevenue, BudgetRevenue, RevenueVariance }.
     """
+    if Config.SQL_BUDGET_VS_ACTUAL_SPLIT:
+        return _get_budget_vs_actual_split(store_id, start_date, end_date, grain)
+    return _get_budget_vs_actual_combined(store_id, start_date, end_date, grain)
+
+
+def _get_budget_vs_actual_split(
+    store_id: str, start_date: str, end_date: str, grain: str
+) -> list:
+    """Merge TotalCore actuals with DailyRevenueBudget targets on PeriodDate."""
+    actual = _get_actual_core_series(store_id, start_date, end_date, grain)
+    budget = _get_budget_core_series(store_id, start_date, end_date, grain)
+    periods = sorted(set(actual.keys()) | set(budget.keys()))
+    rows = []
+    for p in periods:
+        a = round(actual.get(p, 0.0), 2)
+        b = round(budget.get(p, 0.0), 2)
+        rows.append({
+            "PeriodDate": p,
+            "ActualRevenue": a,
+            "BudgetRevenue": b,
+            "RevenueVariance": round(a - b, 2),
+        })
+    return rows
+
+
+def _get_budget_vs_actual_combined(
+    store_id: str, start_date: str, end_date: str, grain: str
+) -> list:
+    """Legacy single-table Actual vs Budget (pre-Sage combined feed)."""
     obj = _validated_budget_vs_actual_object()
     cat_sql, cat_params = _budget_category_filter_sql()
     period_select, group_by, order_by = _budget_period_grain_sql(grain)
@@ -678,7 +1016,6 @@ def get_budget_vs_actual(store_id: str, start_date: str, end_date: str, grain: s
         f"{BUDGET_DATE_SQL} >= CAST(? AS DATE) AND {BUDGET_DATE_SQL} <= CAST(? AS DATE)"
     )
 
-    # Consolidated: sum every unit (no store filter).
     if _is_consolidated_location(store_id):
         sql = f"""
             SELECT
@@ -710,7 +1047,6 @@ def get_budget_vs_actual(store_id: str, start_date: str, end_date: str, grain: s
         """
         return _execute_query(sql, (start_date, end_date, *cat_params, *unit_params))
 
-    # Database mode: INNER JOIN dbo.Locations using the same predicate as MTD TotalCore.
     loc_tbl = _validated_locations_table()
     sid = (store_id or "").strip()
     join_pred = _total_core_join_pred_database()
@@ -1309,7 +1645,8 @@ def _budget_store_totals(scope: str, start_date: str, end_date: str) -> Dict[str
     """{store id -> {actual, budget, variance, attainment_pct}} for scoped stores."""
     idx = _scoped_location_index(scope)
     out: Dict[str, dict] = {}
-    if Config.LOCATIONS_SOURCE == "static":
+    # Fast set-based path only for legacy combined table (stale after Sage).
+    if Config.LOCATIONS_SOURCE == "static" and not Config.SQL_BUDGET_VS_ACTUAL_SPLIT:
         for r in _budget_totals_by_location_static(start_date, end_date):
             uid = r.get("UnitLoc")
             if uid is None:
@@ -1380,7 +1717,7 @@ def budget_vs_actual_summary_for_store(
         "revenue_variance": round(variance, 2),
         "attainment_pct": attainment,
         "over_budget": variance > 0 if variance is not None else None,
-        "source": {"name": _validated_budget_vs_actual_object(), "grain": "daily_core_budget"},
+        "source": {"name": _budget_vs_actual_source_label(), "grain": "daily_core_budget"},
     }
 
 
@@ -1426,7 +1763,7 @@ def rank_stores_budget_variance(
         "scope": scope_key,
         "timeframe": tf,
         "locations": ranked,
-        "source": {"name": _validated_budget_vs_actual_object(), "grain": "store_totals_for_range"},
+        "source": {"name": _budget_vs_actual_source_label(), "grain": "store_totals_for_range"},
     }
 
 
@@ -1600,7 +1937,7 @@ def get_trends(
     dcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_DATE, "SQL_DOOR_COUNT_COL_DATE")
     vcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_VISITS, "SQL_DOOR_COUNT_COL_VISITS")
     lcol = _bracketed_col(Config.SQL_DOOR_COUNT_COL_LOCATION, "SQL_DOOR_COUNT_COL_LOCATION")
-    obj = _validated_retail_monthly_financial_object()
+    from_clause = _monthly_financial_from_clause()
     door_date_filter = (
         f" AND CAST({dcol} AS DATE) >= CAST(? AS DATE) AND CAST({dcol} AS DATE) <= CAST(? AS DATE) "
     )
@@ -1669,7 +2006,7 @@ def get_trends(
             FROM (
                 SELECT
                     {agg_select}
-                FROM {obj} AS d
+                FROM {from_clause}
                 WHERE {month_window_start}
                   AND {month_window_end}
                 GROUP BY d.[Year], d.[Month]
@@ -1703,7 +2040,7 @@ def get_trends(
             FROM (
                 SELECT
                     {agg_select}
-                FROM {obj} AS d
+                FROM {from_clause}
                 WHERE {month_window_start}
                   AND {month_window_end}
                 {unit_sql}
@@ -1731,7 +2068,7 @@ def get_trends(
         FROM (
             SELECT
                 {agg_select}
-            FROM {obj} AS d
+            FROM {from_clause}
             INNER JOIN {loc_tbl} AS loc
               ON loc.LocationID = ?
             {join_name}
@@ -3105,7 +3442,7 @@ def build_data_catalog() -> dict:
             {"name": _validated_retail_monthly_financial_object(), "grain": "monthly_financials"},
             {"name": _validated_door_count_object(), "grain": "daily_door_visits"},
             {"name": _validated_donations_object(), "grain": "daily_donation_amounts"},
-            {"name": _validated_budget_vs_actual_object(), "grain": "daily_actual_vs_budget_core"},
+            {"name": _budget_vs_actual_source_label(), "grain": "daily_actual_vs_budget_core"},
             {"name": "dbo.DonorAddresses", "grain": "donor_latitude_longitude"},
         ],
         "metrics": [

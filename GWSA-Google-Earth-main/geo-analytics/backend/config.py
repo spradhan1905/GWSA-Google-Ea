@@ -32,7 +32,7 @@ class Config:
     SQL_DATABASE = os.environ.get('SQL_DATABASE', 'GWSA_Analytics')
     SQL_USERNAME = os.environ.get('SQL_USERNAME', '')
     SQL_PASSWORD = os.environ.get('SQL_PASSWORD', '')
-    SQL_DRIVER   = os.environ.get('SQL_DRIVER', '{ODBC Driver 17 for SQL Server}')
+    SQL_DRIVER   = os.environ.get('SQL_DRIVER', '{ODBC Driver 18 for SQL Server}')
     SQL_ENCRYPT = os.environ.get('SQL_ENCRYPT', 'yes').strip()
     SQL_TRUST_SERVER_CERTIFICATE = os.environ.get('SQL_TRUST_SERVER_CERTIFICATE', 'yes').strip()
     # True = Trusted Connection / Windows Integrated Security (no SQL login; app must run as a Windows user allowed on SQL)
@@ -55,10 +55,42 @@ class Config:
         'SQL_THIS_MONTH_REVENUE_OBJECT', 'JS_API.dbo.TotalCoreTableFinal'
     ).strip()
     # Quarter / YTD / 12 Months: monthly store rollup (Unit Name matches static LocationName / DB Locations).
+    # When SQL_SAGE_MERGE_ENABLED=True, legacy rows come from SQL_RETAIL_MONTHLY_FINANCIAL_LEGACY_OBJECT
+    # (months before SQL_SAGE_CUTOVER_DATE) and Sage GL rows from SQL_GL_COMBINED_OBJECT (cutover onward).
     SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT = os.environ.get(
         'SQL_RETAIL_MONTHLY_FINANCIAL_OBJECT', 'JS_API.dbo.RetailStoreMonthlyFinancialSummary'
     ).strip()
-    # Actual vs Budget (daily Core revenue): [Unit] encodes location like TotalCoreTableFinal; has [sales unit name].
+    SQL_RETAIL_MONTHLY_FINANCIAL_LEGACY_OBJECT = os.environ.get(
+        'SQL_RETAIL_MONTHLY_FINANCIAL_LEGACY_OBJECT',
+        'JS_API.dbo.RetailStoreMonthlyFinancialSummary',
+    ).strip()
+    SQL_SAGE_MERGE_ENABLED = _env_bool('SQL_SAGE_MERGE_ENABLED', True)
+    SQL_SAGE_CUTOVER_DATE = (os.environ.get('SQL_SAGE_CUTOVER_DATE', '2026-07-01') or '2026-07-01').strip()
+    SQL_GL_COMBINED_OBJECT = os.environ.get(
+        'SQL_GL_COMBINED_OBJECT', 'JS_API.dbo.GL_Combined_Transactions_With_UnitGroup'
+    ).strip()
+    # Optional: restrict Sage-side GL rows (empty = all rows on/after cutover date).
+    SQL_GL_SAGE_DATA_SOURCE = (os.environ.get('SQL_GL_SAGE_DATA_SOURCE') or '').strip()
+    # glAccount_id ranges for Sage GL → monthly P&L buckets (inclusive min, exclusive max).
+    try:
+        SQL_GL_REVENUE_ACCOUNT_MIN = int((os.environ.get('SQL_GL_REVENUE_ACCOUNT_MIN') or '40000').strip())
+        SQL_GL_REVENUE_ACCOUNT_MAX = int((os.environ.get('SQL_GL_REVENUE_ACCOUNT_MAX') or '50000').strip())
+        SQL_GL_OPEX_ACCOUNT_MIN = int((os.environ.get('SQL_GL_OPEX_ACCOUNT_MIN') or '50000').strip())
+        SQL_GL_OPEX_ACCOUNT_MAX = int((os.environ.get('SQL_GL_OPEX_ACCOUNT_MAX') or '60000').strip())
+        SQL_GL_PERSONNEL_ACCOUNT_MIN = int((os.environ.get('SQL_GL_PERSONNEL_ACCOUNT_MIN') or '60000').strip())
+        SQL_GL_PERSONNEL_ACCOUNT_MAX = int((os.environ.get('SQL_GL_PERSONNEL_ACCOUNT_MAX') or '70000').strip())
+    except ValueError:
+        SQL_GL_REVENUE_ACCOUNT_MIN, SQL_GL_REVENUE_ACCOUNT_MAX = 40000, 50000
+        SQL_GL_OPEX_ACCOUNT_MIN, SQL_GL_OPEX_ACCOUNT_MAX = 50000, 60000
+        SQL_GL_PERSONNEL_ACCOUNT_MIN, SQL_GL_PERSONNEL_ACCOUNT_MAX = 60000, 70000
+    # Actual vs Budget: when SQL_BUDGET_VS_ACTUAL_SPLIT=True (default), Actual comes from
+    # SQL_THIS_MONTH_REVENUE_OBJECT (TotalCore) and Budget from SQL_DAILY_REVENUE_BUDGET_OBJECT.
+    # Combined table NoSubCategory stopped refreshing after early June 2026 (Sage cutover).
+    SQL_BUDGET_VS_ACTUAL_SPLIT = _env_bool('SQL_BUDGET_VS_ACTUAL_SPLIT', True)
+    SQL_DAILY_REVENUE_BUDGET_OBJECT = os.environ.get(
+        'SQL_DAILY_REVENUE_BUDGET_OBJECT', 'JS_API.dbo.DailyRevenueBudget'
+    ).strip()
+    # Legacy single-table mode (SQL_BUDGET_VS_ACTUAL_SPLIT=False only).
     SQL_BUDGET_VS_ACTUAL_OBJECT = os.environ.get(
         'SQL_BUDGET_VS_ACTUAL_OBJECT', 'JS_API.dbo.DailyCoreRevenueBudgetVsActual_NoSubCategory'
     ).strip()

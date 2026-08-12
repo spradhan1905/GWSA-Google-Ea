@@ -1,7 +1,7 @@
 """
 GWSA GeoAnalytics — Actual vs Budget Route
 GET /api/budget-vs-actual/<store_id>?start=YYYY-MM-DD&end=YYYY-MM-DD&grain=day|month
-Daily Core revenue Actual vs Budget from DailyCoreRevenueBudgetVsActual_NoSubCategory.
+Actual Core revenue (TotalCore) vs Budget (DailyRevenueBudget) when SQL_BUDGET_VS_ACTUAL_SPLIT=True.
 """
 from flask import Blueprint, request, jsonify
 from marshmallow import ValidationError

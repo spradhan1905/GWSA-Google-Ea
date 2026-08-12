@@ -77,7 +77,7 @@ export default function SidePanel({ location, open, onClose }) {
       end: localDateISO(end),
     };
   });
-  /** Drives API: This Month + Custom → TotalCoreTableFinal; Rolling 3 months/YTD/12 Months → RetailStoreMonthlyFinancialSummary. */
+  /** Rolling 3 months / YTD / 12 Months: legacy monthly rollup + Sage GL from 2026-07-01. */
   const [financialsPreset, setFinancialsPreset] = useState('This Month');
   const [financials, setFinancials] = useState([]);
   const [budgetVsActual, setBudgetVsActual] = useState([]);
@@ -571,7 +571,7 @@ function FinancialsTab({
 }
 
 /**
- * Actual vs Budget Core revenue (DailyCoreRevenueBudgetVsActual_NoSubCategory).
+ * Actual vs Budget Core revenue (TotalCore actual + DailyRevenueBudget).
  * Daily points for This Month / Custom; monthly points for Rolling 3 months / YTD / 12 Months
  * so the chart stays readable. Budget shows as a dashed reference line vs the solid Actual line.
  */
