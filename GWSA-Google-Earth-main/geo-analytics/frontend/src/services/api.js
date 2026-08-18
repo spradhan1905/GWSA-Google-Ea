@@ -47,9 +47,9 @@ api.interceptors.response.use(
   (err) => {
     const status = err.response?.status;
     if (status === 401) {
-      console.warn('[API] 401 Unauthorized — token may be missing or expired');
+      console.warn('[API] 401 Unauthorized: token may be missing or expired');
     } else if (status === 429) {
-      console.warn('[API] Rate limited — slow down');
+      console.warn('[API] Rate limited: slow down');
     }
     return Promise.reject(err);
   }

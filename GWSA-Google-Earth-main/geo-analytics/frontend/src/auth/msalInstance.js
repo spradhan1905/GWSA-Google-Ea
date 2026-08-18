@@ -17,7 +17,7 @@ export async function initMsal() {
 
   if (!authConfigured) {
     console.warn(
-      '[auth] MSAL env vars missing — running in unauthenticated mode. ' +
+      '[auth] MSAL env vars missing: running in unauthenticated mode. ' +
       'Set VITE_AZURE_TENANT_ID, VITE_AZURE_CLIENT_ID, VITE_AZURE_API_SCOPE to enable sign-in.'
     );
     return;

@@ -321,7 +321,7 @@ export default function SidePanel({ location, open, onClose }) {
 
   return (
     <div
-      className={`absolute top-0 right-0 h-full w-full sm:w-[440px] z-40 transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+      className={`absolute top-0 right-0 h-full w-full sm:w-[440px] z-40 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         open ? 'translate-x-0' : 'translate-x-full'
       }`}
       style={isDesktop ? { width: `${panelWidth}px` } : undefined}
@@ -653,12 +653,12 @@ function KeyMetricsTab({ metrics, loadError }) {
       )}
       <MetricCard
         label="Sales Square Ft"
-        value={sqft != null ? formatNumber(sqft) : '—'}
+        value={sqft != null ? formatNumber(sqft) : 'N/A'}
         color="blue"
       />
       <MetricCard
         label="Sales per Sq Ft"
-        value={spsf != null ? formatCurrency(spsf) : '—'}
+        value={spsf != null ? formatCurrency(spsf) : 'N/A'}
         color="green"
       />
       <MetricCard
@@ -792,13 +792,13 @@ function DonationsTab({
         <MetricCard
           label="Peak day"
           value={formatNumber(peakDay.Donations || 0)}
-          subtext={peakDate ? `${peakDate} · highest` : '—'}
+          subtext={peakDate ? `${peakDate} · highest` : 'N/A'}
           color="amber"
         />
         <MetricCard
           label="Lowest day"
           value={formatNumber(lowestDay.Donations || 0)}
-          subtext={lowestDate ? `${lowestDate} · lowest with data` : '—'}
+          subtext={lowestDate ? `${lowestDate} · lowest with data` : 'N/A'}
           color="cyan"
         />
       </div>
@@ -882,13 +882,13 @@ function DoorCountTab({
         <MetricCard
           label="Peak day"
           value={formatNumber(peakDay.DonorVisits || 0)}
-          subtext={peakDate ? `${peakDate} · highest In` : '—'}
+          subtext={peakDate ? `${peakDate} · highest In` : 'N/A'}
           color="amber"
         />
         <MetricCard
           label="Lowest day"
           value={formatNumber(lowestDay?.DonorVisits || 0)}
-          subtext={lowestDate ? `${lowestDate} · lowest In with data` : '—'}
+          subtext={lowestDate ? `${lowestDate} · lowest In with data` : 'N/A'}
           color="cyan"
         />
       </div>
@@ -1107,7 +1107,7 @@ function StoreInfoTab({ info }) {
         </p>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-2xl font-bold leading-tight text-gwsa-text">{info.directorName || '—'}</p>
+            <p className="text-2xl font-bold leading-tight text-gwsa-text">{info.directorName || 'N/A'}</p>
             <p className="text-xs text-gwsa-text-muted mt-0.5">{info.directorTitle || 'Store Operations'}</p>
           </div>
           {info.directorPhone ? (
@@ -1125,7 +1125,7 @@ function StoreInfoTab({ info }) {
             General Manager
           </p>
           <p className="text-2xl font-bold leading-tight text-blue-400">
-            {info.generalManager || '—'}
+            {info.generalManager || 'N/A'}
           </p>
         </div>
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3.5">
@@ -1133,7 +1133,7 @@ function StoreInfoTab({ info }) {
             GM Cell
           </p>
           <p className="text-2xl font-bold leading-tight text-emerald-400">
-            {info.cell || '—'}
+            {info.cell || 'N/A'}
           </p>
         </div>
       </div>

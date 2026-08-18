@@ -31,7 +31,7 @@ const makeAxisFormatter = (granularity) => (dateStr) => {
 };
 
 const formatTooltipValue = (value, name) => {
-  if (typeof value !== 'number') return ['—', name];
+  if (typeof value !== 'number') return ['N/A', name];
   if (name.includes('Ratio')) return [`${(value * 100).toFixed(1)}%`, name];
   if (name.includes('Visits') || name.includes('Door') || name.includes('Donation')) return [value.toLocaleString(), name];
   if (value > 1000) return [`$${value.toLocaleString()}`, name];
@@ -80,8 +80,8 @@ const CustomTooltip = ({ active, payload, label, formatLabel }) => {
   if (!active || !payload?.length) return null;
   const fmt = formatLabel || makeAxisFormatter('month');
   return (
-    <div className="bg-gwsa-surface border border-gwsa-border rounded-lg px-3 py-2 shadow-card">
-      <p className="text-xs text-gwsa-text-muted mb-1.5">{fmt(label)}</p>
+    <div className="rounded-md border border-gwsa-border bg-gwsa-surface px-3 py-2 shadow-card">
+      <p className="mb-1.5 text-xs font-medium text-gwsa-text-secondary">{fmt(label)}</p>
       {payload.map((p, i) => (
         <div key={i} className="flex items-center gap-2 text-xs">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
@@ -124,7 +124,7 @@ function ChartBody({
     <>
       <div className="flex items-start justify-between gap-2 mb-3">
         {title ? (
-          <h3 className="text-xs font-semibold text-gwsa-text-secondary uppercase tracking-wider flex-1 min-w-0">
+          <h3 className="min-w-0 flex-1 text-sm font-semibold text-gwsa-text">
             {title}
           </h3>
         ) : (
@@ -154,19 +154,25 @@ function ChartBody({
         )}
       </div>
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <ComposedChart data={data} margin={{ top: 5, right: secondaryAxes.length ? 14 : 5, bottom: 5, left: -10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1F2A42" vertical={false} />
+        <ComposedChart
+          data={data}
+          accessibilityLayer
+          role="img"
+          aria-label={title || 'Location trend chart'}
+          margin={{ top: 5, right: secondaryAxes.length ? 14 : 5, bottom: 5, left: -10 }}
+        >
+          <CartesianGrid stroke="#d7dce2" vertical={false} />
           <XAxis
             dataKey="date"
             tickFormatter={axisFormat}
-            tick={{ fill: '#64748B', fontSize: 10 }}
-            axisLine={{ stroke: '#2A3555' }}
+            tick={{ fill: '#6b7682', fontSize: 11 }}
+            axisLine={{ stroke: '#b8c0ca' }}
             tickLine={false}
             interval="preserveStartEnd"
           />
           <YAxis
             yAxisId="primary"
-            tick={{ fill: '#64748B', fontSize: 10 }}
+            tick={{ fill: '#6b7682', fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             tickFormatter={getAxisFormatter(primaryUnit)}
@@ -178,7 +184,7 @@ function ChartBody({
               orientation="right"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: line.color, fontSize: 10 }}
+              tick={{ fill: line.color, fontSize: 11 }}
               tickFormatter={getAxisFormatter(line.unit)}
               width={index === 0 ? 28 : 0}
               hide={index > 0}
@@ -189,7 +195,7 @@ function ChartBody({
             <Legend
               iconType="circle"
               iconSize={12}
-              wrapperStyle={{ fontSize: '12px', fontWeight: 500, color: '#CBD5E1', paddingTop: '10px' }}
+              wrapperStyle={{ fontSize: '12px', fontWeight: 500, color: '#46515d', paddingTop: '10px' }}
             />
           )}
           {linesWithAxes.map((line) => (
@@ -200,9 +206,9 @@ function ChartBody({
                 name={line.name}
                 yAxisId={line.yAxisId}
                 fill={line.color}
-                fillOpacity={0.7}
+                fillOpacity={0.9}
                 radius={[2, 2, 0, 0]}
-                maxBarSize={8}
+                maxBarSize={12}
               />
             ) : (
               <Line
@@ -215,7 +221,7 @@ function ChartBody({
                 strokeWidth={2}
                 strokeDasharray={line.dashed ? '5 4' : undefined}
                 dot={false}
-                activeDot={{ r: 4, fill: line.color, stroke: '#0B0F1A', strokeWidth: 2 }}
+                activeDot={{ r: 4, fill: line.color, stroke: '#ffffff', strokeWidth: 2 }}
               />
             )
           ))}
@@ -270,7 +276,7 @@ export default function TrendChart({
 
   return (
     <>
-      <div className="rounded-xl bg-gwsa-bg-alt/50 border border-gwsa-border p-4">
+      <div className="rounded-md border border-gwsa-border bg-gwsa-surface p-4">
         <ChartBody
           {...chartProps}
           chartHeight={embeddedChartHeight}

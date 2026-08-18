@@ -87,7 +87,7 @@ export default function ChatDrawer({ open, onClose, storeContext }) {
   if (!open) return null;
 
   return (
-    <div className={`absolute bottom-0 right-0 z-50 transition-all duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] animate-slide-up ${
+    <div className={`absolute bottom-0 right-0 z-50 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-slide-up ${
       expanded ? 'left-0 top-0' : 'w-full sm:w-[420px] h-[480px] sm:right-4 sm:bottom-4 sm:rounded-2xl overflow-hidden'
     }`}>
       <div className={`h-full bg-gwsa-surface/95 backdrop-blur-xl border border-gwsa-border shadow-panel flex flex-col ${

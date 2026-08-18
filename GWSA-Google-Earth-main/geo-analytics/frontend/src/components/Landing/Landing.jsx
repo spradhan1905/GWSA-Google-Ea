@@ -49,7 +49,7 @@ export default function Landing({ onEnter }) {
               </h1>
               <p className="mt-4 text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl">
                 GWSA GeoAnalytics brings retail stores, donation stations, and outlets
-                together on a single map. Explore financials, traffic, and trends — visually.
+                together on a single map. Explore financials, traffic, and trends visually.
               </p>
             </div>
 

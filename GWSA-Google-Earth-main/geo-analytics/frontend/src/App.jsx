@@ -4,11 +4,16 @@
  */
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import TopBar from './components/Layout/TopBar';
-import StoreList from './components/StoreList/StoreList';
 import MapContainer from './components/Map/MapContainer';
 import SidePanel from './components/Panel/SidePanel';
 import ChatDrawer from './components/Chat/ChatDrawer';
 import LoadingSpinner from './components/Layout/LoadingSpinner';
+import ActionRail from './components/Shell/ActionRail';
+import LayersPanel from './components/Layers/LayersPanel';
+import ToolsPanel from './components/Tools/ToolsPanel';
+import AnalyticsPanel from './components/Analytics/AnalyticsPanel';
+import ReportsPanel from './components/Reports/ReportsPanel';
+import { MapControlsProvider } from './context/MapControlsContext';
 import { fetchLocations } from './services/api';
 import { STORE_LOCATIONS, CONSOLIDATED_LOCATION } from './data/stores';
 import { FEATURES } from './config/features';
@@ -38,10 +43,11 @@ export default function App({ onBackToLanding }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [isMobileLayout, setIsMobileLayout] = useState(getIsMobileLayout);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => getIsMobileLayout());
+  const [activeRailItem, setActiveRailItem] = useState(null);
   const [drawerDragY, setDrawerDragY] = useState(0);
   const [drawerDragging, setDrawerDragging] = useState(false);
   const drawerDragRef = useRef({ active: false, startY: 0, currentY: 0 });
+  const railTriggerRef = useRef(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -49,7 +55,7 @@ export default function App({ onBackToLanding }) {
     const mediaQuery = window.matchMedia(MOBILE_LAYOUT_QUERY);
     const syncMobileLayout = (event) => {
       setIsMobileLayout(event.matches);
-      setSidebarCollapsed(event.matches);
+      setActiveRailItem(null);
     };
 
     syncMobileLayout(mediaQuery);
@@ -110,9 +116,19 @@ export default function App({ onBackToLanding }) {
     setSelectedLocation(location);
     setPanelOpen(true);
     if (isMobileLayout) {
-      setSidebarCollapsed(true);
+      setActiveRailItem(null);
     }
   }, [isMobileLayout]);
+
+  const handleRailSelect = useCallback((itemId, trigger) => {
+    railTriggerRef.current = trigger;
+    setActiveRailItem((current) => current === itemId ? null : itemId);
+  }, []);
+
+  const handleCloseRailPanel = useCallback(() => {
+    setActiveRailItem(null);
+    window.setTimeout(() => railTriggerRef.current?.focus(), 0);
+  }, []);
 
   const filteredLocations = useMemo(() => {
     let list = locations;
@@ -160,10 +176,49 @@ export default function App({ onBackToLanding }) {
     setDrawerDragging(false);
 
     if (distance >= DRAWER_DISMISS_DISTANCE) {
-      setSidebarCollapsed(true);
+      handleCloseRailPanel();
     }
     setDrawerDragY(0);
-  }, []);
+  }, [handleCloseRailPanel]);
+
+  const dragHandleProps = isMobileLayout
+    ? {
+        onPointerDown: handleDrawerPointerDown,
+        onPointerMove: handleDrawerPointerMove,
+        onPointerUp: finishDrawerDrag,
+        onPointerCancel: finishDrawerDrag,
+      }
+    : undefined;
+
+  const renderRailPanel = () => {
+    const panelProps = {
+      onClose: handleCloseRailPanel,
+      mobile: isMobileLayout,
+      dragHandleProps,
+    };
+
+    switch (activeRailItem) {
+      case 'layers':
+        return (
+          <LayersPanel
+            {...panelProps}
+            locations={filteredLocations}
+            selectedLocation={selectedLocation}
+            onSelectLocation={handleListSelect}
+            typeFilter={typeFilter}
+            onTypeFilterChange={setTypeFilter}
+          />
+        );
+      case 'tools':
+        return <ToolsPanel {...panelProps} />;
+      case 'analytics':
+        return <AnalyticsPanel {...panelProps} />;
+      case 'reports':
+        return <ReportsPanel {...panelProps} />;
+      default:
+        return null;
+    }
+  };
 
   if (loading) {
     return (
@@ -174,91 +229,77 @@ export default function App({ onBackToLanding }) {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gwsa-bg">
-      <TopBar
-        locations={locations}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onSearchSelect={handleSearchSelect}
-        onChatToggle={() => setChatOpen(!chatOpen)}
-        chatOpen={chatOpen}
-        aiEnabled={FEATURES.ai}
-        onBackToLanding={onBackToLanding}
-      />
+    <MapControlsProvider>
+      <div className="flex h-screen flex-col overflow-hidden bg-gwsa-bg">
+        <TopBar
+          locations={locations}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onSearchSelect={handleSearchSelect}
+          onChatToggle={() => setChatOpen(!chatOpen)}
+          chatOpen={chatOpen}
+          aiEnabled={FEATURES.ai}
+          onBackToLanding={onBackToLanding}
+        />
 
-      <div className="flex-1 flex min-h-0 relative">
-        {isMobileLayout && !sidebarCollapsed && (
-          <button
-            type="button"
-            aria-label="Close locations list"
-            onClick={() => setSidebarCollapsed(true)}
-            className="absolute inset-0 z-30 bg-slate-950/20 backdrop-blur-[1px] animate-fade-in"
-          />
-        )}
-        {!sidebarCollapsed && (
-          <div
-            className={
-              isMobileLayout
-                ? `absolute inset-x-3 bottom-3 top-20 z-40 animate-slide-up ${drawerDragging ? 'transition-none' : 'transition-transform duration-200 ease-out'}`
-                : 'relative z-10 shrink-0'
-            }
-            style={isMobileLayout && drawerDragY > 0 ? { transform: `translateY(${drawerDragY}px)` } : undefined}
-          >
-            <StoreList
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          {!isMobileLayout && (
+            <>
+              <ActionRail activeItem={activeRailItem} onSelect={handleRailSelect} />
+              {activeRailItem && renderRailPanel()}
+            </>
+          )}
+
+          <main className="relative min-w-0 flex-1 overflow-hidden">
+            <MapContainer
               locations={filteredLocations}
               selectedLocation={selectedLocation}
-              onSelectLocation={handleListSelect}
-              typeFilter={typeFilter}
-              onTypeFilterChange={setTypeFilter}
-              onCollapse={() => setSidebarCollapsed(true)}
-              dragHandleProps={
-                isMobileLayout
-                  ? {
-                      onPointerDown: handleDrawerPointerDown,
-                      onPointerMove: handleDrawerPointerMove,
-                      onPointerUp: finishDrawerDrag,
-                      onPointerCancel: finishDrawerDrag,
-                    }
-                  : undefined
-              }
+              onPinClick={handlePinClick}
             />
-          </div>
-        )}
-        <div className="flex-1 relative overflow-hidden min-w-0">
-          {sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(false)}
-              className={
-                isMobileLayout
-                  ? 'absolute bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full bg-gwsa-accent px-4 py-3 text-sm font-semibold text-white shadow-glow-lg transition-all duration-300 hover:bg-gwsa-accent-hover active:scale-95'
-                  : 'absolute top-1/2 left-3 -translate-y-1/2 z-30 bg-gwsa-surface/95 border border-gwsa-border rounded-full px-3 py-2 text-xs font-medium text-gwsa-text shadow-panel transition-all duration-200 hover:bg-gwsa-surface-hover active:scale-95'
-              }
-            >
-              {isMobileLayout ? `Browse ${filteredLocations.length} locations` : 'Show locations'}
-            </button>
+
+            <SidePanel
+              location={selectedLocation}
+              open={panelOpen}
+              onClose={handleClosePanel}
+            />
+
+            {FEATURES.ai && (
+              <ChatDrawer
+                open={chatOpen}
+                onClose={() => setChatOpen(false)}
+                storeContext={selectedLocation?.name}
+              />
+            )}
+          </main>
+
+          {isMobileLayout && activeRailItem && (
+            <>
+              <button
+                type="button"
+                aria-label="Close navigation panel"
+                onClick={handleCloseRailPanel}
+                className="absolute inset-0 z-20 bg-slate-950/20 backdrop-blur-[1px] animate-fade-in"
+              />
+              <div
+                className={`absolute inset-x-3 bottom-rail top-16 z-rail-panel ${
+                  drawerDragging ? 'transition-none' : 'transition-transform duration-200 ease-out'
+                }`}
+                style={drawerDragY > 0 ? { transform: `translateY(${drawerDragY}px)` } : undefined}
+              >
+                {renderRailPanel()}
+              </div>
+            </>
           )}
-          <MapContainer
-            locations={filteredLocations}
-            selectedLocation={selectedLocation}
-            onPinClick={handlePinClick}
-          />
 
-          <SidePanel
-            location={selectedLocation}
-            open={panelOpen}
-            onClose={handleClosePanel}
-          />
-
-          {FEATURES.ai && (
-            <ChatDrawer
-              open={chatOpen}
-              onClose={() => setChatOpen(false)}
-              storeContext={selectedLocation?.name}
+          {isMobileLayout && (
+            <ActionRail
+              activeItem={activeRailItem}
+              mobile
+              onSelect={handleRailSelect}
             />
           )}
         </div>
       </div>
-    </div>
+    </MapControlsProvider>
   );
 }

@@ -49,13 +49,13 @@ export default function TopBar({
           <button
             type="button"
             onClick={onBackToLanding}
-            className="mr-1 rounded-full border border-gwsa-border bg-gwsa-bg-alt p-1.5 text-gwsa-text-muted hover:text-gwsa-text hover:bg-gwsa-surface-hover"
+            className="mr-1 rounded-sm border border-gwsa-border bg-gwsa-surface p-1.5 text-gwsa-text-muted hover:bg-gwsa-surface-hover hover:text-gwsa-text"
             title="Back to overview"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
         )}
-        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-glow overflow-hidden">
+        <div className="flex h-8 w-8 items-center justify-center overflow-hidden bg-white">
           <img
             src={GWSA_LOGO_URL}
             alt=""
@@ -64,7 +64,7 @@ export default function TopBar({
           />
         </div>
         <div className="hidden sm:block">
-          <h1 className="text-sm font-bold text-gwsa-text leading-tight tracking-tight">
+          <h1 className="text-sm font-semibold leading-tight text-gwsa-text">
             GWSA GeoAnalytics
           </h1>
           <p className="text-[10px] text-gwsa-text-muted leading-tight">
@@ -75,7 +75,7 @@ export default function TopBar({
 
       {/* Search — flexible input: name, city, manager */}
       <div className="flex-1 max-w-lg relative">
-        <div className={`flex items-center h-9 rounded-lg border transition-all duration-200 ${
+        <div className={`flex h-9 items-center rounded-md border transition-colors ${
           focused ? 'border-gwsa-accent bg-gwsa-bg-alt shadow-glow' : 'border-gwsa-border bg-gwsa-bg-alt/50'
         }`}>
           <Search className="w-3.5 h-3.5 text-gwsa-text-muted ml-3 shrink-0" />
@@ -97,7 +97,7 @@ export default function TopBar({
 
         {/* Search dropdown */}
         {focused && searchQuery && filtered.length > 0 && (
-          <div ref={dropdownRef} className="absolute top-full left-0 right-0 mt-1 bg-gwsa-surface border border-gwsa-border rounded-xl shadow-panel overflow-hidden z-50 animate-fade-in">
+          <div ref={dropdownRef} className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-gwsa-border bg-gwsa-surface shadow-panel animate-fade-in">
             {filtered.map((loc) => {
               const cfg = LOCATION_TYPE_CONFIG[loc.type] || LOCATION_TYPE_FALLBACK;
               const TypeIcon = cfg.Icon || LOCATION_TYPE_FALLBACK.Icon;
@@ -111,7 +111,7 @@ export default function TopBar({
                   }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gwsa-surface-hover transition-colors text-left"
                 >
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm"
                     style={{ backgroundColor: `${cfg.color}20`, color: cfg.color }}>
                     {cfg.marker ? (
                       <img
@@ -142,7 +142,7 @@ export default function TopBar({
       {aiEnabled && (
         <button
           onClick={onChatToggle}
-          className={`flex items-center gap-2 h-9 px-3.5 rounded-lg text-sm font-medium transition-all duration-200 shrink-0 ${
+          className={`flex h-9 shrink-0 items-center gap-2 rounded-md px-3.5 text-sm font-medium transition-colors ${
             chatOpen
               ? 'bg-gwsa-accent text-white shadow-glow'
               : 'bg-gwsa-bg-alt border border-gwsa-border text-gwsa-text-secondary hover:text-gwsa-text hover:border-gwsa-border-light'

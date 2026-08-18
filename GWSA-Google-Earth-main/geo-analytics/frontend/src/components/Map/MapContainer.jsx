@@ -4,8 +4,8 @@
  * Renders location pins with custom markers and optional KML overlay.
  */
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { RotateCcw, Ruler, Box } from 'lucide-react';
 import { LOCATION_TYPE_CONFIG, LOCATION_TYPE_FALLBACK } from '../../data/stores';
+import { useMapControls } from '../../context/MapControlsContext';
 import KmlOverlay from './KmlOverlay';
 import MedianIncomeLayer from './MedianIncomeLayer';
 import { getIsMobileMap, MOBILE_MAP_QUERY } from '../../utils/mapDevice';
@@ -17,10 +17,6 @@ const MAP_ZOOM = 12;
 // Use Google's default satellite styling for a clean, modern look.
 // Leaving this array empty means we don't override Google's visual design.
 const MAP_STYLES = [];
-
-function isSatelliteMapType(mapTypeId) {
-  return mapTypeId === 'hybrid' || mapTypeId === 'satellite';
-}
 
 function createMarkerSVG(type, isSelected) {
   const cfg = LOCATION_TYPE_CONFIG[type] || LOCATION_TYPE_FALLBACK;
@@ -75,12 +71,17 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
   const geocoderRef = useRef(null);
   const geocodeCacheRef = useRef({});
   const [mapReady, setMapReady] = useState(false);
-  const [activeTool, setActiveTool] = useState('none'); // 'none' | 'measure'
-  const [is3D, setIs3D] = useState(false);
-  const [incomeLayerOn, setIncomeLayerOn] = useState(false);
-  const [incomeLayerActive, setIncomeLayerActive] = useState(false);
   const [isMobileMap, setIsMobileMap] = useState(getIsMobileMap);
-  const [mapTypeId, setMapTypeId] = useState('hybrid');
+  const {
+    activeTool,
+    is3D,
+    setIs3D,
+    mapTypeId,
+    setMapTypeId,
+    incomeLayerOn,
+    setIncomeLayerStatus,
+    resetViewRequest,
+  } = useMapControls();
   const mapWrapRef = useRef(null);
   const measurePolylineRef = useRef(null);
   const measurePathRef = useRef([]);
@@ -94,13 +95,6 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
-  const handleSetMapType = useCallback((nextType) => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    map.setMapTypeId(nextType);
-    setMapTypeId(nextType);
-  }, []);
-
   // Initialize Google Map
   useEffect(() => {
     if (!window.google?.maps || mapInstanceRef.current) return;
@@ -109,7 +103,7 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
     const map = new window.google.maps.Map(mapRef.current, {
       center: MAP_CENTER,
       zoom: isMobileMap ? 11 : MAP_ZOOM,
-      mapTypeId: 'hybrid',
+      mapTypeId: 'roadmap',
       tilt: 0,
       mapTypeControl: !isMobileMap,
       mapTypeControlOptions: {
@@ -129,7 +123,6 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
 
     mapInstanceRef.current = map;
     geocoderRef.current = new window.google.maps.Geocoder();
-    setMapTypeId(map.getMapTypeId() || 'hybrid');
     setMapReady(true);
   }, []);
 
@@ -142,7 +135,7 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
         const map = new window.google.maps.Map(mapRef.current, {
           center: MAP_CENTER,
           zoom: isMobileMap ? 11 : MAP_ZOOM,
-          mapTypeId: 'hybrid',
+          mapTypeId: 'roadmap',
           tilt: 0,
           streetViewControl: false,
           fullscreenControl: !isMobileMap,
@@ -154,13 +147,53 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
         });
         mapInstanceRef.current = map;
         geocoderRef.current = new window.google.maps.Geocoder();
-        setMapTypeId(map.getMapTypeId() || 'hybrid');
         setMapReady(true);
         clearInterval(interval);
       }
     }, 500);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!mapReady || !map) return undefined;
+    const listener = map.addListener('maptypeid_changed', () => {
+      setMapTypeId(map.getMapTypeId() || 'hybrid');
+    });
+    return () => window.google?.maps?.event?.removeListener(listener);
+  }, [mapReady, setMapTypeId]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!mapReady || !map || map.getMapTypeId() === mapTypeId) return;
+    map.setMapTypeId(mapTypeId);
+  }, [mapReady, mapTypeId]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!mapReady || !map) return;
+    if (is3D) {
+      if (map.getMapTypeId() !== 'hybrid') {
+        map.setMapTypeId('hybrid');
+        setMapTypeId('hybrid');
+      }
+      if ((map.getZoom() || MAP_ZOOM) < 17) map.setZoom(17);
+      map.setTilt(45);
+    } else {
+      map.setTilt(0);
+      map.setHeading(0);
+    }
+  }, [is3D, mapReady, setMapTypeId]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!mapReady || !map) return;
+    map.setCenter(MAP_CENTER);
+    map.setZoom(isMobileMap ? 11 : MAP_ZOOM);
+    map.setTilt(0);
+    map.setHeading(0);
+    setIs3D(false);
+  }, [resetViewRequest, mapReady, isMobileMap, setIs3D]);
 
   // Handle measure tool lifecycle
   useEffect(() => {
@@ -231,9 +264,9 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
           map,
           title: loc.name,
           icon: getMarkerIcon(loc.type, isSelected),
-          zIndex: isSelected ? 1000 : 1,
+          zIndex: isSelected ? 1000 : 100,
           animation: isSelected ? window.google.maps.Animation.BOUNCE : null,
-          clickable: !incomeLayerActive,
+          clickable: true,
           optimized: false,
         });
 
@@ -268,7 +301,7 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
         });
       }
     });
-  }, [locations, selectedLocation, mapReady, onPinClick, incomeLayerActive]);
+  }, [locations, selectedLocation, mapReady, onPinClick]);
 
   // Pan to selected location
   useEffect(() => {
@@ -292,39 +325,6 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
     }
   }, [selectedLocation]);
 
-  const handleResetView = useCallback(() => {
-    if (!mapInstanceRef.current) return;
-    mapInstanceRef.current.setCenter(MAP_CENTER);
-    mapInstanceRef.current.setZoom(MAP_ZOOM);
-    mapInstanceRef.current.setTilt(0);
-    mapInstanceRef.current.setHeading(0);
-    setIs3D(false);
-  }, []);
-
-  const handleClearMeasure = useCallback(() => {
-    setActiveTool('none');
-  }, []);
-
-  const handleToggle3D = useCallback(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    if (!is3D) {
-      map.setMapTypeId('hybrid');
-      // Ensure sufficient zoom level for 3D building perspective.
-      const currentZoom = map.getZoom() || MAP_ZOOM;
-      if (currentZoom < 17) {
-        map.setZoom(17);
-      }
-      map.setTilt(45);
-      setIs3D(true);
-    } else {
-      map.setTilt(0);
-      map.setHeading(0);
-      setIs3D(false);
-    }
-  }, [is3D]);
-
   // KML pin click: try to match feature name to a location and open panel
   const handleKmlClick = useCallback((name, latLng) => {
     if (!name || !locations?.length) return;
@@ -337,100 +337,13 @@ export default function MapContainer({ locations = [], selectedLocation, onPinCl
   return (
     <div ref={mapWrapRef} className="absolute inset-0">
       <div ref={mapRef} className="w-full h-full" />
-      {mapReady && isMobileMap && (
-        <div
-          className="absolute top-3 left-3 z-20 flex rounded-lg border border-gray-300 bg-white shadow-md overflow-hidden text-xs font-medium"
-          role="group"
-          aria-label="Map type"
-        >
-          <button
-            type="button"
-            onClick={() => handleSetMapType('hybrid')}
-            className={`px-3 py-2 border-r border-gray-200 ${
-              isSatelliteMapType(mapTypeId)
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            Satellite
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSetMapType('roadmap')}
-            className={`px-3 py-2 ${
-              mapTypeId === 'roadmap'
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            Map
-          </button>
-        </div>
-      )}
       {mapReady && (
-        <div className="absolute top-3 right-3 flex flex-col gap-2 z-20">
-          <button
-            type="button"
-            onClick={handleResetView}
-            className="bg-white border border-gray-300 rounded-lg p-2 shadow-md hover:bg-gray-50 active:scale-95"
-            title="Reset view"
-          >
-            <RotateCcw className="w-4 h-4 text-gwsa-text" />
-          </button>
-          <button
-            type="button"
-            onClick={handleToggle3D}
-            className={`bg-white border rounded-lg p-2 shadow-md hover:bg-gray-50 active:scale-95 ${
-              is3D
-                ? 'border-blue-500 ring-2 ring-blue-200'
-                : 'border-gray-300'
-            }`}
-            title="Toggle 3D tilt"
-          >
-            <Box className="w-4 h-4 text-gwsa-text" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTool(activeTool === 'measure' ? 'none' : 'measure')}
-            className={`bg-white border rounded-lg p-2 shadow-md hover:bg-gray-50 active:scale-95 ${
-              activeTool === 'measure'
-                ? 'border-blue-500 ring-2 ring-blue-200'
-                : 'border-gray-300'
-            }`}
-            title="Measure distance"
-          >
-            <Ruler className="w-4 h-4 text-gwsa-text" />
-          </button>
-          <MedianIncomeLayer
-            map={mapInstanceRef.current}
-            enabled={incomeLayerOn}
-            onEnabledChange={setIncomeLayerOn}
-            mapPortalRef={mapWrapRef}
-            onLayerActiveChange={setIncomeLayerActive}
-          />
-          {activeTool === 'measure' && window.google?.maps?.geometry && (
-            <div className="mt-1 px-2 py-1 rounded bg-gwsa-surface/95 border border-gwsa-border text-[11px] text-gwsa-text shadow-panel">
-              <span>
-                {measurePathRef.current.length >= 2
-                  ? (() => {
-                      const path = measurePathRef.current;
-                      const m =
-                        window.google.maps.geometry.spherical.computeLength(path);
-                      const km = m / 1000;
-                      return `${km.toFixed(2)} km`;
-                    })()
-                  : 'Click on map to start measuring'}
-              </span>
-              <button
-                type="button"
-                onClick={handleClearMeasure}
-                className="ml-2 text-gwsa-accent hover:text-gwsa-accent-hover"
-              >
-                Clear
-              </button>
-            </div>
-          )}
-        </div>
+        <MedianIncomeLayer
+          map={mapInstanceRef.current}
+          enabled={incomeLayerOn}
+          mapPortalRef={mapWrapRef}
+          onStatusChange={setIncomeLayerStatus}
+        />
       )}
       {mapReady && mapInstanceRef.current && (
         <KmlOverlay map={mapInstanceRef.current} onKmlClick={handleKmlClick} />

@@ -4,7 +4,7 @@
  */
 
 export const formatCurrency = (value) => {
-  if (value == null || isNaN(value)) return '—';
+  if (value == null || isNaN(value)) return 'N/A';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -14,7 +14,7 @@ export const formatCurrency = (value) => {
 };
 
 export const formatCurrencyFull = (value) => {
-  if (value == null || isNaN(value)) return '—';
+  if (value == null || isNaN(value)) return 'N/A';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -24,23 +24,23 @@ export const formatCurrencyFull = (value) => {
 };
 
 export const formatPercent = (value) => {
-  if (value == null || isNaN(value)) return '—';
+  if (value == null || isNaN(value)) return 'N/A';
   return `${(value * 100).toFixed(1)}%`;
 };
 
 export const formatNumber = (value) => {
-  if (value == null || isNaN(value)) return '—';
+  if (value == null || isNaN(value)) return 'N/A';
   return new Intl.NumberFormat('en-US').format(value);
 };
 
 export const formatDate = (dateStr) => {
-  if (!dateStr) return '—';
+  if (!dateStr) return 'N/A';
   const d = new Date(dateStr);
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 };
 
 export const formatDateFull = (dateStr) => {
-  if (!dateStr) return '—';
+  if (!dateStr) return 'N/A';
   const d = new Date(dateStr);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };

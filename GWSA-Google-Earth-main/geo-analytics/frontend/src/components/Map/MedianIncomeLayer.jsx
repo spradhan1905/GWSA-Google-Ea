@@ -3,12 +3,11 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Layers, Loader2 } from 'lucide-react';
 import { fetchTexasTractIncomeLayer, fetchTexasTractIncomeMeta } from '../../services/api';
 import { getIsMobileMap } from '../../utils/mapDevice';
 
 /** Green ramp (low → high income), visible on satellite. */
-const INCOME_COLORS = [
+export const INCOME_COLORS = [
   '#edf8e9',
   '#bae4b3',
   '#74c476',
@@ -113,58 +112,12 @@ function HoverTooltip({ hover }) {
   );
 }
 
-function MapLegend({ meta, hasNoData }) {
-  const breaks = meta?.income_breaks || [];
-  if (breaks.length < 2) return null;
-
-  const segments = [];
-  for (let i = 1; i < breaks.length; i += 1) {
-    segments.push({
-      color: INCOME_COLORS[Math.min(i - 1, INCOME_COLORS.length - 1)],
-      low: breaks[i],
-      high: breaks[i + 1] ?? breaks[breaks.length - 1],
-    });
-  }
-
-  return (
-    <div className="absolute bottom-20 right-3 z-30 w-[200px] rounded-lg border border-gray-300 bg-white px-3 py-2.5 shadow-lg pointer-events-none">
-      <p className="text-xs font-bold text-gray-900 mb-0.5">Median household income</p>
-      <p className="text-[10px] text-gray-600 mb-2">
-        {getIsMobileMap() ? 'Darker green = higher · Tap a tract' : 'Darker green = higher · Hover a tract'}
-      </p>
-      <div className="space-y-1">
-        {segments.map((seg, idx) => (
-          <div key={idx} className="flex items-center gap-2 text-[10px] text-gray-800">
-            <span
-              className="w-5 h-3 rounded-sm border border-gray-400 shrink-0"
-              style={{ backgroundColor: seg.color }}
-            />
-            <span className="tabular-nums font-medium">
-              {formatMoney(seg.low)}
-              {idx < segments.length - 1 ? ` – ${formatMoney(seg.high)}` : '+'}
-            </span>
-          </div>
-        ))}
-      </div>
-      {hasNoData && (
-        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200 text-[10px] text-gray-700">
-          <span
-            className="w-5 h-3 rounded-sm border border-gray-500 shrink-0"
-            style={{ backgroundColor: NO_DATA_FILL }}
-          />
-          <span>No ACS estimate</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function MedianIncomeLayer({
   map,
   enabled,
-  onEnabledChange,
   mapPortalRef,
   onLayerActiveChange,
+  onStatusChange,
 }) {
   const dataLayerRef = useRef(null);
   const listenersRef = useRef([]);
@@ -177,6 +130,16 @@ export default function MedianIncomeLayer({
   const [ready, setReady] = useState(false);
   const [hasNoDataTracts, setHasNoDataTracts] = useState(false);
   const [hover, setHover] = useState(null);
+
+  useEffect(() => {
+    onStatusChange?.({
+      loading,
+      error,
+      meta,
+      ready,
+      hasNoData: hasNoDataTracts,
+    });
+  }, [loading, error, meta, ready, hasNoDataTracts, onStatusChange]);
 
   const detachDataLayer = useCallback(() => {
     listenersRef.current.forEach((l) => {
@@ -341,38 +304,8 @@ export default function MedianIncomeLayer({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => onEnabledChange?.(!enabled)}
-        className={`bg-white border rounded-lg p-2 shadow-md transition-all hover:bg-gray-50 active:scale-95 ${
-          enabled ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-300'
-        }`}
-        title={
-          getIsMobileMap()
-            ? 'Median income (San Antonio area) — tap a tract'
-            : 'Median income by census tract — hover for details'
-        }
-      >
-        {loading ? (
-          <Loader2 className="w-4 h-4 text-gray-800 animate-spin" />
-        ) : (
-          <Layers className="w-4 h-4 text-gray-800" />
-        )}
-      </button>
-
-      {enabled && error && (
-        <div className="max-w-[180px] px-2 py-1 rounded-md bg-white border border-red-400 text-[10px] text-red-800 shadow-md">
-          {error}
-        </div>
-      )}
-
       {portalTarget && createPortal(
-        <>
-          <HoverTooltip hover={hover} />
-          {enabled && ready && (
-            <MapLegend meta={meta} hasNoData={hasNoDataTracts} />
-          )}
-        </>,
+        <HoverTooltip hover={hover} />,
         portalTarget,
       )}
     </>

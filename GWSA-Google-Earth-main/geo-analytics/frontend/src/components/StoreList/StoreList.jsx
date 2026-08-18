@@ -33,19 +33,25 @@ export default function StoreList({
   onTypeFilterChange,
   onCollapse,
   dragHandleProps,
+  embedded = false,
 }) {
   const cfgAll = LOCATION_TYPE_CONFIG;
 
   return (
-    <div className="h-full flex flex-col bg-gwsa-surface/95 backdrop-blur-xl border border-gwsa-border sm:border-y-0 sm:border-l-0 sm:border-r w-full sm:w-[360px] shrink-0 overflow-hidden rounded-2xl sm:rounded-none shadow-panel sm:shadow-none transition-all duration-300 ease-out">
-      <button
-        type="button"
-        aria-label="Drag down to close locations list"
-        className="sm:hidden flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing touch-none"
-        {...dragHandleProps}
-      >
-        <span className="h-1 w-10 rounded-full bg-gwsa-border-light" aria-hidden />
-      </button>
+    <div className={embedded
+      ? 'flex w-full flex-col bg-gwsa-surface'
+      : 'h-full flex flex-col bg-gwsa-surface/95 backdrop-blur-xl border border-gwsa-border sm:border-y-0 sm:border-l-0 sm:border-r w-full sm:w-[360px] shrink-0 overflow-hidden rounded-2xl sm:rounded-none shadow-panel sm:shadow-none transition-all duration-300 ease-out'
+    }>
+      {!embedded && (
+        <button
+          type="button"
+          aria-label="Drag down to close locations list"
+          className="sm:hidden flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing touch-none"
+          {...dragHandleProps}
+        >
+          <span className="h-1 w-10 rounded-full bg-gwsa-border-light" aria-hidden />
+        </button>
+      )}
 
       {/* Header: location context + count + collapse */}
       <div className="shrink-0 px-4 pt-3 sm:pt-4 pb-3 border-b border-gwsa-border flex items-center justify-between gap-2">
@@ -53,7 +59,7 @@ export default function StoreList({
           <p className="text-xs font-medium text-gwsa-text-muted uppercase tracking-wider">
             San Antonio & South Texas
           </p>
-          <p className="text-lg font-bold text-gwsa-text mt-0.5">
+          <p className="mt-0.5 text-base font-semibold text-gwsa-text">
             {locations.length} {locations.length === 1 ? 'location' : 'locations'} found
           </p>
         </div>
@@ -72,15 +78,15 @@ export default function StoreList({
       {/* Filters */}
       <div className="shrink-0 px-4 py-3 border-b border-gwsa-border">
         <p className="text-xs text-gwsa-text-muted mb-2">Filter by type</p>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-gwsa-border bg-gwsa-border">
           {TYPE_FILTERS.map((f) => (
             <button
               key={f.id}
               onClick={() => onTypeFilterChange(f.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 active:scale-95 ${
+              className={`px-2 py-2 text-xs font-medium transition-colors ${
                 typeFilter === f.id
-                  ? 'bg-gwsa-accent text-white shadow-glow'
-                  : 'bg-gwsa-bg-alt border border-gwsa-border text-gwsa-text-secondary hover:text-gwsa-text hover:border-gwsa-border-light'
+                  ? 'bg-gwsa-accent text-white'
+                  : 'bg-gwsa-surface text-gwsa-text-secondary hover:bg-gwsa-surface-hover hover:text-gwsa-text'
               }`}
             >
               {f.label}
@@ -103,14 +109,14 @@ export default function StoreList({
                   tabIndex={0}
                   onClick={() => onSelectLocation(loc)}
                   onKeyDown={(e) => e.key === 'Enter' && onSelectLocation(loc)}
-                  className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-all duration-200 active:scale-[0.99] ${
+                  className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors ${
                     isSelected
                       ? 'bg-gwsa-accent/15 border-l-4 border-gwsa-accent -ml-px pl-[calc(1rem-1px)]'
                       : 'hover:bg-gwsa-surface-hover'
                   }`}
                 >
                   <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
                     style={{ backgroundColor: `${cfg.color}20`, color: cfg.color }}
                   >
                     {cfg.marker ? (
@@ -127,10 +133,12 @@ export default function StoreList({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gwsa-text truncate">{loc.name}</p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span
-                        className="inline-flex text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
-                        style={{ backgroundColor: `${cfg.color}20`, color: cfg.color }}
-                      >
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-gwsa-text-secondary">
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: cfg.color }}
+                          aria-hidden
+                        />
                         {cfg.label}
                       </span>
                     </div>
